@@ -23,7 +23,7 @@
   "remove_fillers": true,
   "smart_formatting": true,
   "style_mode": "clean",
-  "custom_dictionary": "Wispr Flow, WinFlow, GitHub, Windows",
+  "custom_dictionary": "",
   "restore_clipboard": true,
   "sound_cues": true,
   "ui_sounds": true,

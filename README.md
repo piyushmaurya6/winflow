@@ -1,219 +1,129 @@
 <div align="center">
 
-<img src="docs/images/hero-banner.png" alt="WinFlow — Fast AI Voice Dictation for Windows 10 & 11" width="100%" />
+<img src="docs/images/hero-banner.png" alt="WinFlow — AI Voice Dictation for Windows 10 & 11" width="100%" />
 
 <br />
 
 # WinFlow
 
-**Fast, open-source Wispr Flow & FreeFlow alternative built natively for Windows 10 & 11.**  
-Speak naturally anywhere with **`Alt + X`** — strip filler words & stutters automatically and paste clean text in **~0.8s**, while keeping native Windows Voice Typing (**`Win + H`**) 100% intact.
+**Fast, clean AI voice dictation for Windows 10 & 11 — licensed by Piyush Maurya.**  
+Press **`Alt + X`** in any app to speak and paste clean text in ~0.8s, while keeping native Windows Voice Typing (**`Win + H`**) untouched.
 
 <p>
-  <a href="https://github.com/piyushmaurya6/winflow/releases/latest"><img src="https://img.shields.io/github/v/release/piyushmaurya6/winflow?style=for-the-badge&label=Release&color=4F7CFF" alt="Latest Release" /></a>
-  <a href="https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows_x64_ZIP-22C584?style=for-the-badge&logo=windows" alt="Download Windows x64 ZIP" /></a>
+  <a href="https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Setup.exe"><img src="https://img.shields.io/badge/Download-WinFlow--Setup.exe-4F7CFF?style=for-the-badge&logo=windows" alt="Download WinFlow-Setup.exe" /></a>
+  <a href="https://github.com/piyushmaurya6/winflow/releases/latest"><img src="https://img.shields.io/github/v/release/piyushmaurya6/winflow?style=for-the-badge&label=Version&color=22C584" alt="Latest Release" /></a>
   <a href="https://github.com/piyushmaurya6/winflow/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/piyushmaurya6/winflow/ci.yml?branch=main&style=for-the-badge&label=Windows%20CI" alt="Windows CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="MIT License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Piyush%20Maurya%20(MIT)-F59E0B?style=for-the-badge" alt="License" /></a>
 </p>
 
 <p>
-  <a href="#-download--quick-install"><b>Download & Install</b></a> •
-  <a href="#-key-features"><b>Features</b></a> •
+  <a href="#-download--install"><b>Download & Install</b></a> •
+  <a href="#-features"><b>Features</b></a> •
   <a href="#-screenshots"><b>Screenshots</b></a> •
-  <a href="#-keyboard-shortcuts"><b>Shortcuts</b></a> •
-  <a href="#-cloud-vs-offline-modes"><b>Cloud vs Offline</b></a> •
-  <a href="#-architecture"><b>Architecture</b></a>
+  <a href="#-shortcuts"><b>Shortcuts</b></a> •
+  <a href="#-supported-providers"><b>Providers</b></a>
 </p>
 
 </div>
 
 ---
 
-## Why WinFlow?
+## 📥 Download & Install
 
-Tools like **Wispr Flow** (paid subscription) and **FreeFlow** (macOS-only) transformed voice dictation by combining instant Whisper transcription with LLM disfluency cleanup. Meanwhile, Windows' built-in `Win + H` types raw unedited speech, leaves stutters and *"um/uh"* fillers in your text, and struggles with technical vocabulary.
-
-**WinFlow** brings the full AI dictation workflow natively to **Windows 10 & 11** — completely free and open-source:
-
-| Capability | Windows `Win + H` | FreeFlow | Wispr Flow | **WinFlow** |
-| :--- | :---: | :---: | :---: | :---: |
-| **Runs Natively on Windows 10/11** | ✅ | ❌ *(macOS only)* | ✅ | ✅ |
-| **100% Free & Open Source (MIT)** | ✅ | ✅ | ❌ *(Paid)* | ✅ |
-| **Removes Fillers (`um`, `uh`) & Stutters (`can Can`)** | ❌ | ✅ | ✅ | ✅ |
-| **Custom Tech & Name Dictionary** | ❌ | ✅ | ✅ | ✅ |
-| **Sub-Second Cloud Mode (BYOK: Groq, Gemini, GPT, Claude, Grok, NVIDIA, Kimi)** | ❌ | ✅ | ✅ | ✅ *(8+ Providers)* |
-| **Native Hinglish Mode (`"Apna"` — Hindi in English letters)** | ❌ | ❌ | ⚠️ | ✅ *(Cloud + Offline)* |
-| **100% Offline Local Mode (`faster-whisper`)** | ❌ | ✅ | ❌ | ✅ |
-| **Keeps Native Windows `Win + H` Working Too** | — | — | ✅ | ✅ *(Uses `Alt + X`)* |
-
----
-
-## 📥 Download & Quick Install
-
-### Option 1 — One-Line PowerShell Install *(Recommended)*
-Open **PowerShell** and run:
-
-```powershell
-irm https://raw.githubusercontent.com/piyushmaurya6/winflow/main/scripts/install.ps1 | iex
-```
-
-> Automatically downloads WinFlow, sets up an isolated Python 3.12 runtime via `uv`, creates **Desktop** & **Start Menu** shortcuts with the WinFlow icon, and launches WinFlow in your System Tray.
-
-### Option 2 — Direct Release Download (No Git Required)
-
-| Package | Platform | Direct Download Link |
+| Package | Platform | Direct Download |
 | :--- | :--- | :--- |
-| **`WinFlow-v1.2.0-Windows-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable Bundle (.zip)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.2.0/WinFlow-v1.2.0-Windows-x64.zip) |
-| **`WinFlow-QuickInstaller.bat`** | Windows 10 / 11 (64-bit) | [**⬇ Download 1-Click Installer (.bat)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.2.0/WinFlow-QuickInstaller.bat) |
-| **All Releases & Checksums** | GitHub Releases | [**View v1.2.0 Release Notes ↗**](https://github.com/piyushmaurya6/winflow/releases/tag/v1.2.0) |
+| **`WinFlow-Setup.exe`** *(Recommended)* | Windows 10 / 11 (64-bit) | [**⬇ Download Standalone Installer (`WinFlow-Setup.exe`)**](https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Setup.exe) |
+| **`WinFlow-Portable-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable App (`.zip`)**](https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Portable-x64.zip) |
 
-1. Download and extract **`WinFlow-v1.2.0-Windows-x64.zip`**.
-2. Double-click **`Install-And-Run.bat`** once to finish setup and create your Desktop shortcut.
-3. Anytime afterward, launch silently via your **WinFlow** Desktop shortcut or **`Start-WinFlow.vbs`** (double-clicking again while running opens the minimalist Settings window).
+1. Download and run **`WinFlow-Setup.exe`**.
+2. Click **Accept & Install** — a single clean progress bar installs `WinFlow.exe`, Desktop & Start Menu shortcuts, and uninstaller automatically (zero Python, PowerShell, or `.bat` scripts needed).
+3. Click **Open WinFlow** and press **`Alt + X`** in any app to dictate.
 
-### Option 3 — From Source (Developers)
-
-```powershell
-git clone https://github.com/piyushmaurya6/winflow.git
-cd winflow
-uv venv --python 3.12 .venv
-uv pip install --python .venv\Scripts\python.exe -r pyproject.toml
-wscript.exe Start-WinFlow.vbs
-```
+<div align="center">
+  <img src="docs/images/installer.png" alt="WinFlow Standalone Installer" width="88%" />
+</div>
 
 ---
 
-## ✨ Key Features
+## ✨ Features
 
-- **⚡ Multi-Model Cloud Vault (8+ Providers)** — Bring your own API key from **Groq**, **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Elon Musk's xAI (Grok)**, **NVIDIA NIM**, **Moonshot Kimi** (`.ai` & `.cn`), or **Custom OpenAI-Compatible** endpoints (**OpenRouter**, **DeepSeek**, **Together**, **Ollama**). Save keys for multiple providers simultaneously and switch in 1 click.
-- **🇮🇳 Built-In Hinglish Mode (`"Apna"` — Hindi in English Alphabet)** — Speak Hindi + English naturally and output 100% Romanized Latin letters (*"Bhai, apna kaam jaldi kar do and push to GitHub"*) — never unwanted Devanagari script — across **both** Cloud AI and 100% Offline Local modes.
-- **🔒 100% Private Offline Mode** — Switch to **Offline Local Whisper** (`faster-whisper` `int8` with Silero VAD) in 1 click from the system tray. Loads cached models with `local_files_only=True` (zero network requests) and automatically unloads from RAM when you switch back to Cloud mode.
-- **🎛️ Minimalist WebView2 Control Center + Tactile Acoustics** — Isolated STA-process Settings window with dark Windows 11 DWM chrome, inline **`Paste` / `Apply Key`** live verification, DPI-proof sticky **`Apply & Save`** footer, and synthesized micro-acoustic button feedback (toggleable via `Sound On / Muted`).
-- **🧠 Wispr-Style AI Disfluency Cleanup** — Strips vocal hesitations (*"um"*, *"uh"*, *"like"*, *"you know"*), collapses repeated stutters (*"can Can we"* → *"Can we"*), applies your **Custom Words** dictionary (*"whisper flow"* → *"Wispr Flow"*), and executes voice formatting commands (*"new line"*, *"new paragraph"*).
-- **🎹 Smart Hybrid `Alt + X` Hook (`WH_KEYBOARD_LL`)** — Tap `Alt + X` quickly to latch hands-free toggle mode, or hold `Alt + X` for push-to-talk. Suppresses the Windows `Alt` menu-bar highlight (`vkE8` mask) while leaving native **`Win + H`** completely untouched.
-- **🪶 Zero-Focus-Steal ARGB Pill Overlay** — Rendered directly via Win32 `UpdateLayeredWindow` (`WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT`) with 2x supersampled anti-aliasing and live WASAPI microphone waveform metering.
-- **📋 Clipboard-Safe Instant Injection** — Pastes polished text straight into VS Code, Slack, Chrome, Notion, Word, or Windows Terminal and automatically restores your previous clipboard contents afterward.
+- **Standalone Native `.exe` App & Installer** — Self-contained 64-bit `WinFlow-Setup.exe` and `WinFlow.exe` licensed by **Piyush Maurya**, with clean Desktop/Start Menu shortcuts and Windows Installed Apps (`Uninstall-WinFlow.exe`) support.
+- **Simple, Clean Native App UI** — Minimalist dark Windows 11 interface with tactile button sounds, zero clutter, and instant `Paste` + `Apply` API key setup.
+- **Hinglish + English + Hindi** — Speak Hindi in **`Hinglish`** mode to type clean Romanized English letters (like `"Apna"`), or switch to **`English`**, **`Hindi`**, or **`Auto`**.
+- **8 Cloud Providers + 100% Offline Mode** — Connect **Groq**, **Gemini**, **GPT**, **Claude**, **Grok**, **NVIDIA**, **Kimi**, or any **Custom** OpenAI-compatible endpoint — or run **Offline** locally via `faster-whisper` with no API key.
+- **Smart Disfluency Cleanup** — Strips filler words, collapses repeated stutters, and pastes straight at your cursor without stealing window focus.
+- **Coexists with Native Windows Dictation** — WinFlow uses **`Alt + X`** (tap to toggle, hold for push-to-talk, `Esc` to cancel) and leaves **`Win + H`** untouched.
 
 ---
 
 ## 📸 Screenshots
 
-### Floating Waveform Pill States
-<img src="docs/images/floating-pills-showcase.png" alt="WinFlow Floating Pill States" width="100%" />
+### Floating Status Pill
+<img src="docs/images/floating-pills-showcase.png" alt="WinFlow Floating Pill" width="100%" />
 
-### Minimalist Windows 11 Control Center & Dictation History
+### App Interface
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/settings-engine.png" alt="Engine & Cloud/Offline Settings" width="100%" />
-      <p align="center"><sub><b>Engine & Free Cloud / Offline Configuration</b></sub></p>
+      <img src="docs/images/settings-engine.png" alt="Engine Tab" width="100%" />
+      <p align="center"><sub><b>Engine, Language & Provider</b></sub></p>
     </td>
     <td width="50%">
-      <img src="docs/images/settings-cleanup.png" alt="AI Cleanup & Alt+X Settings" width="100%" />
-      <p align="center"><sub><b>Wispr-Style AI Cleanup, Custom Dictionary & Microphone</b></sub></p>
+      <img src="docs/images/settings-cleanup.png" alt="Settings Tab" width="100%" />
+      <p align="center"><sub><b>Settings & Shortcut</b></sub></p>
     </td>
   </tr>
 </table>
 
 <div align="center">
-  <img src="docs/images/settings-history.png" alt="Recent Dictations History" width="68%" />
-  <p><sub><b>Recent Dictations Log with Latency Metrics & One-Click Copy</b></sub></p>
+  <img src="docs/images/settings-history.png" alt="History Tab" width="52%" />
+  <p><sub><b>Dictation History</b></sub></p>
 </div>
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Shortcuts
 
-| Shortcut | Action | Behavior |
-| :--- | :--- | :--- |
-| **Tap `Alt + X`** *(<350 ms)* | **Hands-Free Toggle** | Starts recording immediately; press **`Alt + X`** again when finished to transcribe, clean, and paste. |
-| **Hold `Alt + X`** *(≥350 ms)* | **Push-to-Talk** | Records for as long as you hold `Alt + X`; release to transcribe, clean, and paste immediately. |
-| **`Esc`** *(while recording)* | **Cancel Dictation** | Cancels the active recording without pasting (`Esc` behaves normally in all apps when idle). |
-| **`Win + H`** | **Native Windows Voice Typing** | Left **100% untouched** so you can still use built-in Windows dictation whenever you want. |
-
----
-
-## ☁️ Cloud vs Offline Modes
-
-Right-click the **WinFlow icon** in the Windows System Tray (blue in Cloud mode, green in Offline mode, grey when Paused) to switch engines instantly:
-
-| Mode | Speech-to-Text | Cleanup Engine | Typical Latency (30w) | RAM Usage | API Key Needed? |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cloud — Groq** *(Recommended)* | `whisper-large-v3-turbo` | `qwen/qwen3.8-27b` | **~700 – 900 ms** | ~35 MB | Free key ([console.groq.com](https://console.groq.com/keys)) |
-| **Cloud — Google Gemini** | `gemini-3.5-flash-lite` *(Audio)* | Single-pass Gemini 3.5 | **~1.1 – 2.0 s** | ~35 MB | Free key ([aistudio.google.com](https://aistudio.google.com/apikey)) |
-| **Cloud — OpenAI (GPT)** | `gpt-4o-mini-transcribe` | `gpt-4o-mini` | **~950 – 1,500 ms** | ~35 MB | API key ([platform.openai.com](https://platform.openai.com/api-keys)) |
-| **Cloud — Claude / xAI Grok / NVIDIA / Kimi / Custom** | Hybrid Whisper *(Cloud or Local)* | Claude Haiku / Grok / NVIDIA NIM / Kimi K2 | **~900 – 1,800 ms** | ~35–260 MB | Respective provider API key |
-| **Offline Local** | `faster-whisper` (`tiny`/`base`/`small`) | Deterministic NLP + Hinglish Romanizer | **~1.1 – 1.6 s** *(CPU)* | ~260 MB | **None (100% Offline)** |
+| Shortcut | Action |
+| :--- | :--- |
+| **Tap `Alt + X`** | Start / stop hands-free dictation |
+| **Hold `Alt + X`** | Push-to-talk (pastes on release) |
+| **`Esc`** *(while recording)* | Cancel active dictation |
+| **`Win + H`** | Native Windows Voice Typing (untouched) |
 
 ---
 
-## 🏗️ Architecture
+## ☁️ Supported Providers
 
-```mermaid
-flowchart LR
-    A["Alt + X Hook\n(WH_KEYBOARD_LL + vkE8 Mask)"] --> B["WASAPI 16kHz Recorder\n(Silence Trim + RMS Meter)"]
-    B --> C{"Active Engine"}
-    B -.-> P["Win32 ARGB Pill\n(UpdateLayeredWindow)"]
-    C -->|"Cloud (Groq)"| D["Whisper Large v3 Turbo\n+ Qwen 3.8 Cleanup"]
-    C -->|"Cloud (Gemini)"| E["Gemini 2.5 Flash\nSingle-Pass Audio"]
-    C -->|"100% Offline"| F["faster-whisper (int8)\n+ Local Disfluency Cleaner"]
-    D & E & F --> G["Modifier-Safe Injector\n(Clipboard Guard + Ctrl+V)"]
-```
-
-### Project Layout
-
-```text
-winflow/
-├── assets/
-│   ├── logo.png                # High-resolution WinFlow brand mark
-│   └── winflow.ico             # Multi-size Windows icon (16px – 256px)
-├── docs/images/                # Product screenshots & pill showcase
-├── scripts/
-│   ├── install.ps1             # Remote & local PowerShell 1-liner installer
-│   └── generate_assets.py      # Reproducible icon & screenshot builder
-├── tests/
-│   ├── unit_test.py            # Deterministic Windows CI unit tests
-│   └── self_test.py            # Full end-to-end audio/STT/UI integration suite
-├── winflow/
-│   ├── app.py                  # Tray controller, watchdog & lifecycle orchestrator
-│   ├── audio.py                # 16 kHz WASAPI capture & silence trimming
-│   ├── cleaner.py              # Disfluency/stutter stripper & LLM prompt builder
-│   ├── config.py               # Thread-safe config & HKCU Startup registry helper
-│   ├── engine.py               # Groq, Gemini & faster-whisper unified speech engine
-│   ├── hotkey.py               # Native Win32 WH_KEYBOARD_LL Alt+X hook
-│   ├── injector.py             # Modifier-aware SendInput paste & clipboard restore
-│   ├── overlay.py              # Per-pixel ARGB UpdateLayeredWindow floating pill
-│   ├── settings_ui.py          # Minimalist Edge WebView2 Control Center & IPC
-│   └── sounds.py               # Native WinMM (winsound) & tactile UI acoustics
-├── config.example.json         # Example configuration template
-├── Install-And-Run.bat         # One-click local setup & launcher
-├── Start-WinFlow.vbs           # Silent windowless background launcher
-├── Start-WinFlow.bat           # Batch launcher
-└── pyproject.toml              # Project metadata & dependencies
-```
+| Mode / Provider | Key Portal |
+| :--- | :--- |
+| **Offline** *(No key needed)* | Built-in `faster-whisper` (`Tiny` / `Base` / `Small`) |
+| **Groq** | [console.groq.com/keys](https://console.groq.com/keys) |
+| **Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| **GPT (OpenAI)** | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| **Claude (Anthropic)** | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| **Grok (xAI)** | [console.x.ai](https://console.x.ai/) |
+| **NVIDIA** | [build.nvidia.com](https://build.nvidia.com/explore/discover) |
+| **Kimi (Moonshot)** | [platform.moonshot.ai](https://platform.moonshot.ai/console/api-keys) |
+| **Custom** | OpenRouter, DeepSeek, Together, Ollama, or any OpenAI-compatible URL |
 
 ---
 
-## 🛡️ Privacy & Security
-
-- **Zero Telemetry:** WinFlow collects zero analytics or telemetry.
-- **Local Key Storage:** API keys are stored only on your machine in `config.json` (git-ignored).
-- **Administrator Windows Note:** Due to Windows UIPI (User Interface Privilege Isolation), standard user-level apps cannot intercept shortcuts while an *elevated* ("Run as Administrator") window holds focus unless WinFlow is also launched as Administrator.
-
-See [SECURITY.md](SECURITY.md) for full details.
-
----
-
-## 🤝 Contributing
-
-Contributions, bug reports, and feature ideas are welcome! Check out [CONTRIBUTING.md](CONTRIBUTING.md) to get started and run the test suite:
+## 🛠️ Build From Source (Developers)
 
 ```powershell
+git clone https://github.com/piyushmaurya6/winflow.git
+cd winflow
+uv venv --python 3.12 .venv
+uv pip install --python .venv\Scripts\python.exe -r pyproject.toml pyinstaller
 .\.venv\Scripts\python.exe tests\unit_test.py
+.\.venv\Scripts\python.exe scripts\build_release.py
 ```
+
+Outputs `release_artifacts\WinFlow-Setup.exe` and `release_artifacts\WinFlow-Portable-x64.zip`.
 
 ---
 
 ## 📄 License
 
-Released under the [MIT License](LICENSE). Copyright © 2026 [Piyush Maurya](https://github.com/piyushmaurya6).
+Copyright © 2026 **[Piyush Maurya](https://github.com/piyushmaurya6)**. Released under the [MIT License](LICENSE).

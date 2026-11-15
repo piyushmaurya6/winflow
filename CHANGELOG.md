@@ -1,38 +1,31 @@
 # Changelog
 
-All notable changes to **WinFlow** will be documented in this file.
+All notable changes to **WinFlow** are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.3.0] - 2026-11-15
+
+### Added
+- **Standalone Native `.exe` Installer (`WinFlow-Setup.exe`)**: Replaced all `.bat` and `.vbs` launcher/downloader scripts with a self-contained 64-bit native Windows installer (`WinFlow-Setup.exe`) licensed by **Piyush Maurya**, featuring a clean license view, a single smooth installation progress bar (with zero file/component clutter), Desktop & Start Menu shortcuts, and a native uninstaller (`Uninstall-WinFlow.exe`).
+- **Compiled Standalone `WinFlow.exe`**: Packaged the full WinFlow runtime into a native 64-bit `WinFlow.exe` executable (`--noupx`) requiring zero Python, `uv`, or PowerShell scripts on target PCs.
+
+### Changed
+- **Simplified Native App UI**: Redesigned the Settings interface into a compact, uncluttered desktop app (`Engine` | `Settings` | `History`) with simple tactile buttons and switches, removing all long descriptions and placeholder examples.
+
+### Removed
+- Removed `WinFlow-QuickInstaller.bat`, `Install-And-Run.bat`, `Start-WinFlow.bat`, `Start-WinFlow.vbs`, and `scripts/install.ps1` so antivirus heuristics never flag script downloaders on other PCs.
 
 ## [1.2.0] - 2026-11-15
 
 ### Added
-- **Hinglish Dictation Mode (`"Apna"` — Hindi in English Alphabet)**: Added first-class `Hinglish` language support across both Cloud AI and 100% Offline Local modes. Speak Hindi + English naturally and WinFlow writes strictly in Roman/English letters (e.g., `"Bhai, apna kaam jaldi kar do"`), backed by Whisper Hinglish prompting, LLM Romanization, and a deterministic Devanagari-to-Hinglish schwa-deleting transliterator in `winflow/cleaner.py`.
-- **Multi-Provider AI Key Vault (8+ Model Providers)**: Added native API key management, live HTTP key verification, and dynamic model discovery for **Groq**, **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Elon Musk's xAI (Grok)**, **NVIDIA NIM**, **Moonshot Kimi** (`.ai` & `.cn` auto-fallback), and **Custom OpenAI-Compatible** endpoints (**OpenRouter**, **DeepSeek**, **Together**, **Cerebras**, **Ollama**).
-- **System Tray Language & Provider Switchers**: Switch between `English`, `Hinglish ("Apna")`, `Hindi`, and `Auto` — or jump between any saved AI provider — directly from the Windows System Tray menu.
+- **Hinglish Mode (`"Apna"`)**: Romanized Hindi-in-English-letters output across Cloud and Offline modes.
+- **8-Provider Cloud Vault**: Added Groq, Gemini, GPT, Claude, Grok, NVIDIA, Kimi, and Custom OpenAI-compatible API support.
 
 ## [1.1.0] - 2026-11-15
 
 ### Added
-- **Minimalist Edge WebView2 Control Center (`winflow/settings_ui.py`)**: Replaced the legacy Tkinter settings window with a hardware-accelerated minimalist UI running in its own isolated STA process — eliminating Win32 OLE clipboard freezes when pasting API keys (`Ctrl+V` / `Paste`) and preventing bottom-bar clipping across all Windows high-DPI scaling levels (`100%–200%`).
-- **Inline `Apply Key` + Live Verification**: Added an inline **`Paste`**, **`Show/Hide`**, and **`Apply Key`** button directly beside the API key input that verifies Groq/Gemini keys asynchronously and signals the background `Alt + X` daemon immediately via Win32 Named Events (`Local\WinFlowReloadConfigEvent`).
-- **Tactile Button Acoustics (`winflow/sounds.py` + Web Audio)**: Every button, segmented tab, pill, and toggle switch now produces crisp, synthesized tactile micro-sounds (`press`, `tab`, `toggleOn`, `toggleOff`, `apply`, `error`) with a one-click **`Sound On / Muted`** header toggle, while background dictation cues run via native `winmm.dll` (`winsound`) with zero PortAudio contention.
-- **First-Run & Re-Launch Polish**: Automatically opens Settings on first install and focuses Settings whenever the user re-launches the Desktop shortcut while WinFlow is already running in the system tray.
-
-### Fixed
-- Fixed Settings window freeze when pasting API keys or enumerating slow Bluetooth/WDM-KS microphones.
-- Fixed missing/clipped bottom Save button on `125%–175%` DPI laptop screens via a flexbox sticky **`Apply & Save`** footer.
-- Updated Google Gemini Cloud engine to `gemini-3.5-flash-lite` (with automatic fallback) for 2026 API keys where `gemini-2.5-flash` was retired (`404`).
+- **Edge WebView2 UI + Tactile Button Sounds**: Isolated STA-process UI with inline API key verification and Web Audio micro-acoustics.
 
 ## [1.0.0] - 2026-11-15
 
 ### Added
-- **Global `Alt + X` Low-Level Hook (`WH_KEYBOARD_LL`)**: Smart Hybrid mode supporting quick-tap hands-free toggle, hold-to-speak push-to-talk, `Esc` cancellation, and `vkE8` menu-bar suppression while leaving native Windows Voice Typing (`Win + H`) completely untouched.
-- **Dual Switchable Speech Engines**:
-  - **Free Cloud API Mode**: Groq (`whisper-large-v3-turbo` + `qwen/qwen3.8-27b` sub-second AI cleanup) and Google Gemini (`gemini-2.5-flash` single-pass audio + cleanup).
-  - **100% Offline Local Mode**: `faster-whisper` (`tiny`, `base`, `small`, `distil-large-v3`) with Silero VAD, `local_files_only` zero-network startup, automatic CUDA 12 runtime verification, and automatic RAM unload when switching to Cloud mode.
-- **Wispr-Style AI Disfluency & Formatting Cleanup**: Removes spoken hesitations (*"um"*, *"uh"*, *"like"*, *"you know"*), collapses word/phrase stutters (*"can Can"* → *"Can"*), applies custom vocabulary spellings, and converts spoken formatting commands (*"new line"*, *"new paragraph"*).
-- **Non-Intrusive Floating Pill (`UpdateLayeredWindow`)**: Per-pixel 32-bit ARGB Win32 overlay with live WASAPI RMS waveform bars that never steals focus from the active typing window.
-- **Dark Windows 11 Settings & History UI**: Multi-tab configuration panel, microphone selector, custom dictionary, startup registry toggle, Pause toggle, and 1-click copy dictation history.
-- **One-Click Windows Installer**: PowerShell bootstrapper (`scripts/install.ps1`) and `Install-And-Run.bat`.
+- Initial Windows 10/11 release with `Alt + X` hook (`Win + H` untouched), Cloud & Offline Whisper STT, disfluency cleanup, and Win32 ARGB floating pill.

@@ -1,3 +1,4 @@
-"""WinFlow — Native Windows AI Voice Dictation (Wispr Flow Alternative)."""
+"""WinFlow — AI Voice Dictation for Windows."""
 
-__version__ = "1.0.0"
+__author__ = "Piyush Maurya"
+__version__ = "1.3.0"

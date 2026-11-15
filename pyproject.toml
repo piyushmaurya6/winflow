@@ -1,7 +1,9 @@
 [project]
 name = "winflow"
-version = "1.2.0"
-description = "Minimalist AI Voice Dictation for Windows 10/11 (Alt+X) with Hinglish ('Apna'), Multi-Model Cloud (Groq, Gemini, OpenAI, Claude, xAI Grok, NVIDIA, Kimi), Offline Whisper & Tactile Sound UI"
+version = "1.3.0"
+description = "Fast AI Voice Dictation for Windows 10/11 (Alt+X)"
+authors = [{ name = "Piyush Maurya" }]
+license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = [
     "faster-whisper>=1.1.0",

@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw
 from .audio import AudioRecorder, play_cue
 from .config import (
     CONFIG_PATH,
-    PROJECT_ROOT,
+    LOG_PATH,
     PROVIDER_SPECS,
     SUPPORTED_PROVIDERS,
     ConfigManager,
@@ -23,11 +23,12 @@ from .engine import SpeechEngine
 from .hotkey import AltXHotkeyListener
 from .injector import paste_text_at_cursor, set_clipboard_text
 from .overlay import FloatingPillOverlay
-from .settings_ui import SettingsWindowController
+from .settings_ui import SHUTDOWN_EVENT_NAME, SettingsWindowController, kernel32
 from .sounds import play_sound
 
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
-    filename=str(PROJECT_ROOT / "winflow.log"),
+    filename=str(LOG_PATH),
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
@@ -43,13 +44,13 @@ def _create_tray_icon(mode: str, recording: bool = False, paused: bool = False) 
     d = ImageDraw.Draw(img)
 
     if paused:
-        bg = (107, 114, 128, 255)    # Slate grey when paused (Native Windows Win+H active)
+        bg = (107, 114, 128, 255)
     elif recording:
-        bg = (239, 68, 68, 255)      # Vibrant coral red while listening
+        bg = (239, 68, 68, 255)
     elif mode == "cloud":
-        bg = (79, 124, 255, 255)     # Electric blue in Cloud API mode
+        bg = (79, 124, 255, 255)
     else:
-        bg = (34, 197, 132, 255)     # Emerald green in Offline Local mode
+        bg = (34, 197, 132, 255)
 
     d.rounded_rectangle((4, 4, 60, 60), radius=16, fill=bg)
     bars = [(17, 26, 38), (27, 16, 48), (37, 20, 44), (47, 27, 37)]
@@ -85,13 +86,27 @@ class WinFlowApp:
         )
         self._max_record_timer: threading.Timer | None = None
         self._mutex_handle = None
+        self._shutdown_event = None
 
     def _acquire_single_instance(self) -> bool:
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        self._mutex_handle = kernel32.CreateMutexW(None, False, "Local\\WinFlowSingleInstanceMutex")
+        suffix = os.environ.get("WINFLOW_INSTANCE_ID", "")
+        self._mutex_handle = kernel32.CreateMutexW(
+            None, False, f"Local\\WinFlowSingleInstanceMutex{suffix}"
+        )
         last_err = ctypes.get_last_error()
         ERROR_ALREADY_EXISTS = 183
         return last_err != ERROR_ALREADY_EXISTS
+
+    def _start_shutdown_watcher(self) -> None:
+        self._shutdown_event = kernel32.CreateEventW(None, False, False, SHUTDOWN_EVENT_NAME)
+
+        def _watch() -> None:
+            while self._shutdown_event:
+                if kernel32.WaitForSingleObject(self._shutdown_event, 500) == 0:
+                    self.shutdown()
+                    break
+
+        threading.Thread(target=_watch, name="WinFlow-ShutdownWatch", daemon=True).start()
 
     def _cancel_max_timer(self) -> None:
         if self._max_record_timer is not None:
@@ -102,7 +117,7 @@ class WinFlowApp:
         log.info("Alt+X intercepted -> start (%s)", trigger_kind)
         if self._busy_transcribing.locked():
             self.hotkey.reset_state()
-            self.overlay.show_toast("Finishing previous clip…", duration_s=1.0)
+            self.overlay.show_toast("Finishing…", duration_s=1.0)
             return
 
         cfg = self.config_mgr.data
@@ -110,7 +125,7 @@ class WinFlowApp:
             self.recorder.start(device=cfg.input_device)
         except Exception as exc:
             self.hotkey.reset_state()
-            self.overlay.show_toast(f"Mic error: {exc}", is_error=True, duration_s=2.4)
+            self.overlay.show_toast(f"Mic error: {exc}", is_error=True, duration_s=2.2)
             return
 
         self._cancel_max_timer()
@@ -120,7 +135,7 @@ class WinFlowApp:
 
         play_cue("start", enabled=cfg.sound_cues)
         if trigger_kind == "holding":
-            self.overlay.show_listening("Hold Alt+X to talk…")
+            self.overlay.show_listening("Listening…")
         elif trigger_kind == "toggled":
             self.overlay.show_listening("Listening… (Alt+X)")
         else:
@@ -136,7 +151,7 @@ class WinFlowApp:
         if new_mode == "toggled":
             self.overlay.show_listening("Listening… (Alt+X)")
         elif new_mode == "holding":
-            self.overlay.show_listening("Release Alt+X to paste")
+            self.overlay.show_listening("Release to paste")
 
     def _handle_record_cancel(self) -> None:
         self._cancel_max_timer()
@@ -175,17 +190,17 @@ class WinFlowApp:
                 res = fut.result(timeout=HARD_TRANSCRIBE_TIMEOUT_S)
             except concurrent.futures.TimeoutError:
                 log.error("Transcription timed out after %.1fs", HARD_TRANSCRIBE_TIMEOUT_S)
-                self.overlay.show_toast("Timed out — try again", is_error=True, duration_s=2.0)
+                self.overlay.show_toast("Timed out", is_error=True, duration_s=1.8)
                 toast_shown = True
                 return
             except Exception as exc:
                 log.exception("Transcription error")
-                self.overlay.show_toast(str(exc), is_error=True, duration_s=2.5)
+                self.overlay.show_toast(str(exc), is_error=True, duration_s=2.2)
                 toast_shown = True
                 return
 
             if not res.final_text:
-                self.overlay.show_toast("No speech detected", is_error=False, duration_s=0.9)
+                self.overlay.show_toast("No speech", is_error=False, duration_s=0.8)
                 toast_shown = True
                 return
 
@@ -200,10 +215,10 @@ class WinFlowApp:
             )
             log.info("Transcribed via %s in %dms", res.mode_used, res.latency_ms)
             if pasted:
-                self.overlay.show_toast(f"Pasted ({res.latency_ms}ms)", duration_s=0.8)
+                self.overlay.show_toast("Pasted", duration_s=0.75)
             else:
                 set_clipboard_text(res.final_text)
-                self.overlay.show_toast("Copied to clipboard", duration_s=1.2)
+                self.overlay.show_toast("Copied", duration_s=1.0)
             toast_shown = True
         finally:
             if not toast_shown:
@@ -217,9 +232,9 @@ class WinFlowApp:
             self._cancel_max_timer()
             self.hotkey.reset_state()
             self.recorder.cancel()
-            self.overlay.show_toast("WinFlow Paused", duration_s=1.5)
+            self.overlay.show_toast("Paused", duration_s=1.2)
         else:
-            self.overlay.show_toast("WinFlow Active (Alt+X)", duration_s=1.4)
+            self.overlay.show_toast("Active (Alt+X)", duration_s=1.2)
         self._refresh_tray_icon(recording=False)
         if self.tray:
             self.tray.update_menu()
@@ -227,30 +242,30 @@ class WinFlowApp:
     def _switch_engine_mode(self, mode: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         if mode == "cloud" and not self.config_mgr.has_active_cloud_key():
-            self.overlay.show_toast("Paste API key in Settings first", is_error=True, duration_s=2.2)
+            self.overlay.show_toast("Add API key first", is_error=True, duration_s=1.8)
             self.settings_ui.open_settings(tab_index=0)
             return
 
         self._paused = False
         self.config_mgr.update(engine_mode=mode)
         self._on_config_updated(from_ui=False)
-        prov_badge = PROVIDER_SPECS.get(self.config_mgr.data.cloud_provider, {}).get("badge", "Cloud AI")
-        badge = prov_badge if mode == "cloud" else "Offline Local Mode"
-        self.overlay.show_toast(f"Switched: {badge}", duration_s=1.3)
+        prov_badge = PROVIDER_SPECS.get(self.config_mgr.data.cloud_provider, {}).get("badge", "Cloud")
+        badge = prov_badge if mode == "cloud" else "Offline"
+        self.overlay.show_toast(badge, duration_s=1.1)
 
     def _switch_cloud_provider(self, prov: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         if not self.config_mgr.data.get_api_key(prov):
             self.config_mgr.update(cloud_provider=prov)
             lbl = PROVIDER_SPECS.get(prov, {}).get("label", prov.upper())
-            self.overlay.show_toast(f"Add {lbl} API key in Settings", is_error=True, duration_s=2.0)
+            self.overlay.show_toast(f"Add {lbl} key", is_error=True, duration_s=1.8)
             self.settings_ui.open_settings(tab_index=0)
             return
         self._paused = False
         self.config_mgr.update(engine_mode="cloud", cloud_provider=prov)
         self._on_config_updated(from_ui=False)
         badge = PROVIDER_SPECS.get(prov, {}).get("badge", prov.upper())
-        self.overlay.show_toast(f"Active: {badge}", duration_s=1.3)
+        self.overlay.show_toast(badge, duration_s=1.1)
 
     def _set_language(self, lang: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
@@ -260,11 +275,11 @@ class WinFlowApp:
             self.tray.update_menu()
         labels = {
             "en": "English",
-            "hinglish": "Hinglish (Apna)",
-            "hi": "Hindi (Devanagari)",
-            "auto": "Auto-Detect",
+            "hinglish": "Hinglish",
+            "hi": "Hindi",
+            "auto": "Auto",
         }
-        self.overlay.show_toast(f"Language: {labels.get(lang, lang)}", duration_s=1.2)
+        self.overlay.show_toast(labels.get(lang, lang), duration_s=1.0)
 
     def _set_style_mode(self, style_mode: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
@@ -290,9 +305,9 @@ class WinFlowApp:
         hist = self.config_mgr.data.history
         if hist:
             set_clipboard_text(hist[0].get("cleaned", ""))
-            self.overlay.show_toast("Copied last dictation", duration_s=1.0)
+            self.overlay.show_toast("Copied", duration_s=0.9)
         else:
-            self.overlay.show_toast("No history yet", duration_s=1.0)
+            self.overlay.show_toast("No history", duration_s=0.9)
 
     def _on_config_updated(self, from_ui: bool = False) -> None:
         cfg = self.config_mgr.data
@@ -307,13 +322,13 @@ class WinFlowApp:
             self.tray.update_menu()
         if from_ui and not self.hotkey.is_recording:
             badge = (
-                PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud AI")
+                PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud")
                 if cfg.engine_mode == "cloud"
-                else f"Offline ({cfg.local_model_size})"
+                else "Offline"
             )
             if cfg.language == "hinglish":
                 badge = f"{badge} • Hinglish"
-            self.overlay.show_toast(f"Applied • {badge}", duration_s=1.2)
+            self.overlay.show_toast(f"Saved • {badge}", duration_s=1.0)
 
     def _refresh_tray_icon(self, recording: bool = False) -> None:
         if not self.tray:
@@ -322,15 +337,15 @@ class WinFlowApp:
         mode = cfg.engine_mode
         self.tray.icon = _create_tray_icon(mode=mode, recording=recording, paused=self._paused)
         if self._paused:
-            self.tray.title = "WinFlow (PAUSED) — Alt+X disabled"
+            self.tray.title = "WinFlow — Paused"
             return
         provider_desc = (
             PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", cfg.cloud_provider.upper())
             if mode == "cloud"
-            else f"Offline ({cfg.local_model_size})"
+            else "Offline"
         )
         lang_tag = " • Hinglish" if cfg.language == "hinglish" else ""
-        self.tray.title = f"WinFlow — {provider_desc}{lang_tag} | Press Alt+X"
+        self.tray.title = f"WinFlow — {provider_desc}{lang_tag} (Alt+X)"
 
     def _make_provider_item(self, prov: str) -> pystray.MenuItem:
         label = PROVIDER_SPECS[prov]["label"]
@@ -347,34 +362,34 @@ class WinFlowApp:
     def _build_menu(self) -> pystray.Menu:
         return pystray.Menu(
             pystray.MenuItem(
-                "WinFlow Settings & API Keys… (Alt+X)",
+                "Open WinFlow",
                 lambda icon, item: self.settings_ui.open_settings(0),
                 default=True,
             ),
             pystray.MenuItem(
-                "Pause WinFlow (Disable Alt+X)",
+                "Pause",
                 lambda icon, item: self._toggle_paused(),
                 checked=lambda item: self._paused,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Mode: Cloud AI (Fastest)",
+                "Cloud",
                 lambda icon, item: self._switch_engine_mode("cloud"),
                 checked=lambda item: self.config_mgr.data.engine_mode == "cloud",
                 radio=True,
             ),
             pystray.MenuItem(
-                "Mode: 100% Offline Local Whisper",
+                "Offline",
                 lambda icon, item: self._switch_engine_mode("local"),
                 checked=lambda item: self.config_mgr.data.engine_mode == "local",
                 radio=True,
             ),
             pystray.MenuItem(
-                "Cloud AI Provider",
+                "Provider",
                 pystray.Menu(*(self._make_provider_item(p) for p in SUPPORTED_PROVIDERS)),
             ),
             pystray.MenuItem(
-                "Dictation Language (Hinglish / English)",
+                "Language",
                 pystray.Menu(
                     pystray.MenuItem(
                         "English",
@@ -383,19 +398,19 @@ class WinFlowApp:
                         radio=True,
                     ),
                     pystray.MenuItem(
-                        'Hinglish — Hindi in English letters ("Apna")',
+                        "Hinglish",
                         lambda icon, item: self._set_language("hinglish"),
                         checked=lambda item: self.config_mgr.data.language == "hinglish",
                         radio=True,
                     ),
                     pystray.MenuItem(
-                        "Hindi (Devanagari — अपना)",
+                        "Hindi",
                         lambda icon, item: self._set_language("hi"),
                         checked=lambda item: self.config_mgr.data.language == "hi",
                         radio=True,
                     ),
                     pystray.MenuItem(
-                        "Auto-Detect",
+                        "Auto",
                         lambda icon, item: self._set_language("auto"),
                         checked=lambda item: self.config_mgr.data.language == "auto",
                         radio=True,
@@ -404,27 +419,27 @@ class WinFlowApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Remove Filler Words & Stutters",
+                "Remove Filler Words",
                 lambda icon, item: self._toggle_fillers(),
                 checked=lambda item: self.config_mgr.data.remove_fillers,
             ),
             pystray.MenuItem(
-                "AI Writing Style",
+                "Style",
                 pystray.Menu(
                     pystray.MenuItem(
-                        "Natural Clean (Keep exact voice)",
+                        "Natural",
                         lambda icon, item: self._set_style_mode("clean"),
                         checked=lambda item: self.config_mgr.data.style_mode == "clean",
                         radio=True,
                     ),
                     pystray.MenuItem(
-                        "Polished & Concise",
+                        "Polished",
                         lambda icon, item: self._set_style_mode("polished"),
                         checked=lambda item: self.config_mgr.data.style_mode == "polished",
                         radio=True,
                     ),
                     pystray.MenuItem(
-                        "Raw Verbatim",
+                        "Raw",
                         lambda icon, item: self._set_style_mode("raw"),
                         checked=lambda item: self.config_mgr.data.style_mode == "raw",
                         radio=True,
@@ -433,28 +448,28 @@ class WinFlowApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Copy Last Dictation",
+                "Copy Last",
                 lambda icon, item: self._copy_last_dictation(),
             ),
             pystray.MenuItem(
-                "Recent Dictations…",
+                "History",
                 lambda icon, item: self.settings_ui.open_settings(2),
             ),
             pystray.MenuItem(
-                "Launch at Windows Startup",
+                "Launch at Startup",
                 lambda icon, item: self._toggle_startup(),
                 checked=lambda item: is_startup_enabled(),
             ),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit WinFlow", lambda icon, item: self.shutdown()),
+            pystray.MenuItem("Quit", lambda icon, item: self.shutdown()),
         )
 
     def run(self) -> int:
         if not self._acquire_single_instance():
-            # Already running in system tray -> open/focus the minimalist Settings window!
             self.settings_ui.open_settings(0)
             return 0
 
+        self._start_shutdown_watcher()
         self.overlay.start()
         self.settings_ui.start()
         self.hotkey.start()
@@ -464,13 +479,13 @@ class WinFlowApp:
             self.engine.preload_local_model_async(cfg)
         if cfg.engine_mode == "cloud":
             self.engine.warm_cloud_connection_async(cfg)
-            mode_badge = PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud AI")
+            mode_badge = PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud")
         else:
-            mode_badge = "Offline Local"
+            mode_badge = "Offline"
         if cfg.language == "hinglish":
             mode_badge = f"{mode_badge} • Hinglish"
 
-        self.overlay.show_toast(f"WinFlow Ready • Alt+X ({mode_badge})", duration_s=1.6)
+        self.overlay.show_toast(f"WinFlow • Alt+X ({mode_badge})", duration_s=1.4)
 
         if self._first_run and os.environ.get("WINFLOW_NO_FIRST_RUN_UI") != "1":
             self.settings_ui.open_settings(0)
@@ -478,7 +493,7 @@ class WinFlowApp:
         self.tray = pystray.Icon(
             "winflow",
             icon=_create_tray_icon(mode=cfg.engine_mode),
-            title="WinFlow — Press Alt+X to speak",
+            title="WinFlow (Alt+X)",
             menu=self._build_menu(),
         )
         self._refresh_tray_icon(recording=False)
@@ -486,6 +501,9 @@ class WinFlowApp:
         return 0
 
     def shutdown(self) -> None:
+        if self._shutdown_event:
+            kernel32.CloseHandle(self._shutdown_event)
+            self._shutdown_event = None
         self._cancel_max_timer()
         self.hotkey.stop()
         self.recorder.cancel()

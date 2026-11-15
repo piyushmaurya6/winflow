@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 import winreg
@@ -9,77 +10,63 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+IS_FROZEN = bool(getattr(sys, "frozen", False))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = PROJECT_ROOT / "config.json"
-MODELS_DIR = PROJECT_ROOT / "models"
-STARTUP_VBS_PATH = PROJECT_ROOT / "Start-WinFlow.vbs"
+
+if IS_FROZEN:
+    ASSET_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "WinFlow"
+else:
+    ASSET_ROOT = PROJECT_ROOT
+    DATA_ROOT = PROJECT_ROOT
+
+CONFIG_PATH = DATA_ROOT / "config.json"
+MODELS_DIR = DATA_ROOT / "models"
+LOG_PATH = DATA_ROOT / "winflow.log"
+
 RUN_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_REG_NAME = "WinFlow"
 
 PROVIDER_SPECS: dict[str, dict[str, str]] = {
     "groq": {
         "label": "Groq",
-        "badge": "Groq Turbo",
-        "placeholder": "Paste gsk_... Groq API key",
-        "portal_label": "Get free Groq key ↗",
+        "badge": "Groq",
         "portal_url": "https://console.groq.com/keys",
-        "hint": "Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 (~0.8s).",
     },
     "gemini": {
         "label": "Gemini",
-        "badge": "Gemini Flash",
-        "placeholder": "Paste AIza... / AQ... Gemini API key",
-        "portal_label": "Get free Gemini key ↗",
+        "badge": "Gemini",
         "portal_url": "https://aistudio.google.com/apikey",
-        "hint": "Google Gemini 3.5 Flash Lite single-pass audio & Hinglish cleanup.",
     },
     "openai": {
-        "label": "OpenAI GPT",
-        "badge": "OpenAI GPT",
-        "placeholder": "Paste sk-... OpenAI API key",
-        "portal_label": "Get OpenAI key ↗",
+        "label": "GPT",
+        "badge": "GPT",
         "portal_url": "https://platform.openai.com/api-keys",
-        "hint": "OpenAI GPT-4o Mini Transcribe + GPT-4o Mini cleanup.",
     },
     "anthropic": {
         "label": "Claude",
-        "badge": "Anthropic Claude",
-        "placeholder": "Paste sk-ant-... Anthropic Claude key",
-        "portal_label": "Get Claude key ↗",
+        "badge": "Claude",
         "portal_url": "https://console.anthropic.com/settings/keys",
-        "hint": "Anthropic Claude Haiku / Sonnet cleanup & Hinglish Romanizer.",
     },
     "xai": {
-        "label": "xAI Grok",
-        "badge": "xAI Grok",
-        "placeholder": "Paste xai-... Grok API key",
-        "portal_label": "Get xAI Grok key ↗",
+        "label": "Grok",
+        "badge": "Grok",
         "portal_url": "https://console.x.ai/",
-        "hint": "Elon Musk's xAI Grok fast cleanup & Hinglish Romanizer.",
     },
     "nvidia": {
         "label": "NVIDIA",
-        "badge": "NVIDIA NIM",
-        "placeholder": "Paste nvapi-... NVIDIA NIM key",
-        "portal_label": "Get free NVIDIA key ↗",
+        "badge": "NVIDIA",
         "portal_url": "https://build.nvidia.com/explore/discover",
-        "hint": "NVIDIA NIM (Llama / Nemotron / Qwen) cleanup & Hinglish Romanizer.",
     },
     "kimi": {
         "label": "Kimi",
-        "badge": "Moonshot Kimi",
-        "placeholder": "Paste sk-... Moonshot Kimi key",
-        "portal_label": "Get Kimi key ↗",
+        "badge": "Kimi",
         "portal_url": "https://platform.moonshot.ai/console/api-keys",
-        "hint": "Moonshot AI Kimi K2 cleanup & Hinglish Romanizer (.ai & .cn supported).",
     },
     "custom": {
-        "label": "Custom +",
-        "badge": "Custom API",
-        "placeholder": "Paste sk-... OpenRouter / DeepSeek / Custom key",
-        "portal_label": "OpenRouter keys ↗",
+        "label": "Custom",
+        "badge": "Custom",
         "portal_url": "https://openrouter.ai/keys",
-        "hint": "Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Together, Cerebras, Ollama).",
     },
 }
 
@@ -88,7 +75,6 @@ SUPPORTED_PROVIDERS = tuple(PROVIDER_SPECS.keys())
 
 @dataclass
 class AppConfig:
-    # "local" (100% offline faster-whisper) or "cloud" (Groq / Gemini / GPT / Claude / Grok / NVIDIA / Kimi / Custom)
     engine_mode: str = "local"
     cloud_provider: str = "groq"
 
@@ -96,28 +82,23 @@ class AppConfig:
     groq_api_key: str = ""
     gemini_api_key: str = ""
 
-    # Multi-provider API key vault: {provider_id: api_key}
+    # Multi-provider API key vault
     api_keys: dict[str, str] = field(default_factory=dict)
     custom_base_url: str = "https://openrouter.ai/api/v1"
     custom_model: str = ""
 
-    # Local Whisper & Language configuration
-    local_model_size: str = "base"  # tiny, base, small, distil-large-v3
-    local_device: str = "auto"      # auto, cuda, cpu
-    # "en" (English), "hinglish" (Hindi in English letters like 'Apna'), "hi" (Devanagari), "auto"
-    language: str = "en"
+    local_model_size: str = "base"
+    local_device: str = "auto"
+    language: str = "en"  # "en", "hinglish", "hi", "auto"
 
-    # Hotkey behavior: "hybrid" (tap toggles, hold push-to-talk), "toggle", "hold"
     hotkey_mode: str = "hybrid"
     hold_threshold_ms: int = 350
 
-    # AI & Cleanup features
     remove_fillers: bool = True
     smart_formatting: bool = True
     style_mode: str = "clean"
-    custom_dictionary: str = "Wispr Flow, WinFlow, GitHub, Windows"
+    custom_dictionary: str = ""
 
-    # Output & UX
     restore_clipboard: bool = True
     sound_cues: bool = True
     ui_sounds: bool = True
@@ -125,7 +106,6 @@ class AppConfig:
     history: list[dict[str, Any]] = field(default_factory=list)
 
     def sync_keys(self) -> None:
-        """Keep legacy groq_api_key / gemini_api_key and api_keys dict strictly in sync."""
         if not isinstance(self.api_keys, dict):
             self.api_keys = {}
         if self.groq_api_key and not self.api_keys.get("groq"):
@@ -207,7 +187,6 @@ class ConfigManager:
 
     def update(self, **kwargs: Any) -> None:
         with self._lock:
-            # Ensure api_keys merges cleanly if passed partially, while keeping legacy fields synced
             incoming_keys = kwargs.pop("api_keys", None)
             if isinstance(incoming_keys, dict):
                 merged = dict(self.data.api_keys or {})
@@ -248,9 +227,23 @@ class ConfigManager:
             self.data.history = self.data.history[:30]
             self.save()
 
+    def clear_history(self) -> None:
+        with self._lock:
+            self.data.history = []
+            self.save()
+
     def has_active_cloud_key(self) -> bool:
         with self._lock:
             return bool(self.data.get_api_key())
+
+
+def _startup_command() -> str:
+    if IS_FROZEN:
+        return f'"{Path(sys.executable)}"'
+    py = Path(sys.executable)
+    pyw = py.with_name("pythonw.exe")
+    exe = pyw if pyw.exists() else py
+    return f'"{exe}" "{PROJECT_ROOT / "run_winflow.py"}"'
 
 
 def is_startup_enabled() -> bool:
@@ -270,8 +263,7 @@ def set_startup_enabled(enable: bool) -> bool:
             winreg.HKEY_CURRENT_USER, RUN_REG_PATH, 0, winreg.KEY_SET_VALUE
         ) as key:
             if enable:
-                cmd = f'wscript.exe "{STARTUP_VBS_PATH}"'
-                winreg.SetValueEx(key, RUN_REG_NAME, 0, winreg.REG_SZ, cmd)
+                winreg.SetValueEx(key, RUN_REG_NAME, 0, winreg.REG_SZ, _startup_command())
             else:
                 try:
                     winreg.DeleteValue(key, RUN_REG_NAME)

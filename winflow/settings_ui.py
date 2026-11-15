@@ -1,7 +1,7 @@
 """
-Minimalist, hardware-accelerated Settings & Control Center built on native Windows Edge WebView2 (pywebview).
-Runs in its own isolated STA process so clipboard paste (Ctrl+V), audio device enumeration, and UI rendering
-can never freeze or contend with the background Alt+X dictation hook.
+Clean, native Windows Edge WebView2 UI for WinFlow.
+Runs in an isolated STA process so clipboard paste, microphone lookup, and UI rendering
+never contend with the background Alt+X keyboard hook.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import ctypes.wintypes as wintypes
-import json
+import os
 import subprocess
 import sys
 import threading
@@ -22,7 +22,9 @@ import httpx
 
 from .audio import list_input_devices
 from .config import (
+    ASSET_ROOT,
     CONFIG_PATH,
+    IS_FROZEN,
     PROJECT_ROOT,
     PROVIDER_SPECS,
     ConfigManager,
@@ -30,11 +32,15 @@ from .config import (
     set_startup_enabled,
 )
 from .injector import get_clipboard_text, set_clipboard_text
-from .sounds import play_sound
 
-RELOAD_EVENT_NAME = "Local\\WinFlowReloadConfigEvent"
-FOCUS_SETTINGS_EVENT_NAME = "Local\\WinFlowFocusSettingsEvent"
-SETTINGS_MUTEX_NAME = "Local\\WinFlowSettingsWindowMutex"
+_INSTANCE_SUFFIX = os.environ.get("WINFLOW_INSTANCE_ID", "")
+RELOAD_EVENT_NAME = f"Local\\WinFlowReloadConfigEvent{_INSTANCE_SUFFIX}"
+FOCUS_SETTINGS_EVENT_NAME = f"Local\\WinFlowFocusSettingsEvent{_INSTANCE_SUFFIX}"
+SETTINGS_MUTEX_NAME = f"Local\\WinFlowSettingsWindowMutex{_INSTANCE_SUFFIX}"
+SHUTDOWN_EVENT_NAME = f"Local\\WinFlowShutdownEvent{_INSTANCE_SUFFIX}"
+
+CREATE_NO_WINDOW = 0x08000000
+EVENT_MODIFY_STATE = 0x0002
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -49,8 +55,6 @@ kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
 kernel32.WaitForSingleObject.restype = wintypes.DWORD
 kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 kernel32.CloseHandle.restype = wintypes.BOOL
-
-EVENT_MODIFY_STATE = 0x0002
 
 
 def signal_named_event(name: str) -> None:
@@ -82,7 +86,7 @@ class SettingsWindowController:
     def _watch_reload_loop(self) -> None:
         while self._running and self._reload_event:
             res = kernel32.WaitForSingleObject(self._reload_event, 500)
-            if res == 0:  # WAIT_OBJECT_0
+            if res == 0:
                 self.config_mgr.load()
                 if self.on_config_saved:
                     try:
@@ -91,20 +95,27 @@ class SettingsWindowController:
                         pass
 
     def open_settings(self, tab_index: int = 0) -> None:
-        # If window is already open, signal it to come to foreground immediately
         h_focus = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, FOCUS_SETTINGS_EVENT_NAME)
         if h_focus:
             kernel32.SetEvent(h_focus)
             kernel32.CloseHandle(h_focus)
             return
 
+        if IS_FROZEN:
+            subprocess.Popen(
+                [sys.executable, "--settings", f"--tab={tab_index}"],
+                cwd=str(Path(sys.executable).parent),
+                creationflags=CREATE_NO_WINDOW,
+            )
+            return
+
         python_exe = Path(sys.executable)
-        # Prefer pythonw.exe so opening settings from console never flashes a terminal
         pythonw_exe = python_exe.with_name("pythonw.exe")
         exe = str(pythonw_exe if pythonw_exe.exists() else python_exe)
         subprocess.Popen(
-            [exe, "-m", "winflow.settings_ui", f"--tab={tab_index}"],
+            [exe, str(PROJECT_ROOT / "run_winflow.py"), "--settings", f"--tab={tab_index}"],
             cwd=str(PROJECT_ROOT),
+            creationflags=CREATE_NO_WINDOW,
         )
 
     def stop(self) -> None:
@@ -113,10 +124,6 @@ class SettingsWindowController:
             kernel32.CloseHandle(self._reload_event)
             self._reload_event = None
 
-
-# ============================================================================
-# Minimalist HTML/CSS/JS Frontend (Linear / Raycast / Teenage Engineering craft)
-# ============================================================================
 
 MINIMALIST_HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -129,18 +136,17 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     --bg: #0a0b0e;
     --surface: #12141a;
     --surface-hover: #171a22;
-    --surface-2: #191c24;
-    --border: rgba(255, 255, 255, 0.075);
-    --border-strong: rgba(255, 255, 255, 0.15);
+    --surface-2: #1a1d26;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
     --text: #f3f5f8;
-    --text-secondary: #949bb0;
-    --text-muted: #62697d;
-    --accent: #edf0f7;
+    --text-secondary: #959cb2;
+    --text-muted: #636b80;
+    --accent: #f1f3f8;
     --accent-fg: #0a0b0e;
     --blue: #5b8cff;
     --green: #34d399;
     --red: #f87171;
-    --amber: #fbbf24;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   }
 
@@ -152,7 +158,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     -webkit-font-smoothing: antialiased;
   }
 
-  input, textarea {
+  input {
     user-select: text;
   }
 
@@ -162,7 +168,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     color: var(--text);
     font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
-    line-height: 1.45;
+    line-height: 1.4;
     overflow: hidden;
   }
 
@@ -172,25 +178,25 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     height: 100vh;
   }
 
-  /* ---- Header ---- */
+  /* Header */
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 22px 12px;
+    padding: 15px 20px 11px;
     flex-shrink: 0;
   }
 
   .brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 9px;
   }
 
   .logo-mark {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
     background: linear-gradient(160deg, #5e8bff 0%, #3b68f2 100%);
     display: flex;
     align-items: center;
@@ -201,15 +207,15 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
   .logo-mark span {
     display: block;
-    width: 2.2px;
+    width: 2px;
     border-radius: 2px;
     background: #fff;
   }
 
   .brand-title {
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
 
   .status-chip {
@@ -220,7 +226,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     border-radius: 999px;
     font-size: 11px;
     font-weight: 500;
-    background: rgba(255, 255, 255, 0.045);
+    background: rgba(255, 255, 255, 0.04);
     border: 1px solid var(--border);
     color: var(--text-secondary);
   }
@@ -234,32 +240,31 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   .status-dot.cloud { background: var(--blue); }
 
   .icon-btn {
-    height: 30px;
+    height: 28px;
     padding: 0 10px;
-    border-radius: 8px;
+    border-radius: 7px;
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text-secondary);
+    font-family: inherit;
     font-size: 11.5px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    transition: transform 140ms var(--ease-out), background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    transition: transform 130ms var(--ease-out), background-color 130ms ease, color 130ms ease, border-color 130ms ease;
   }
   .icon-btn:hover {
     background: var(--surface-hover);
     color: var(--text);
     border-color: var(--border-strong);
   }
-  .icon-btn:active {
-    transform: scale(0.96);
-  }
+  .icon-btn:active { transform: scale(0.96); }
 
-  /* ---- Segmented Nav ---- */
+  /* Tabs */
   .nav-wrap {
-    padding: 0 22px 12px;
+    padding: 0 20px 11px;
     flex-shrink: 0;
   }
 
@@ -269,7 +274,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     grid-template-columns: repeat(3, 1fr);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 9px;
     padding: 3px;
   }
 
@@ -281,9 +286,9 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     width: calc((100% - 6px) / 3);
     background: var(--surface-2);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 7px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-    transition: transform 180ms var(--ease-out);
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 170ms var(--ease-out);
     pointer-events: none;
   }
 
@@ -296,20 +301,20 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     font-family: inherit;
     font-size: 12.5px;
     font-weight: 500;
-    padding: 6px 0;
+    padding: 5.5px 0;
     cursor: pointer;
-    border-radius: 7px;
-    transition: color 140ms ease, transform 140ms var(--ease-out);
+    border-radius: 6px;
+    transition: color 130ms ease, transform 130ms var(--ease-out);
   }
   .nav-tab:hover { color: var(--text); }
   .nav-tab:active { transform: scale(0.97); }
   .nav-tab.active { color: var(--text); font-weight: 600; }
 
-  /* ---- Scrollable Content ---- */
+  /* Content */
   .content {
     flex: 1;
     overflow-y: auto;
-    padding: 2px 22px 10px;
+    padding: 1px 20px 10px;
   }
   .content::-webkit-scrollbar { width: 5px; }
   .content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
@@ -318,37 +323,34 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     display: none;
     flex-direction: column;
     gap: 10px;
-    animation: paneEnter 160ms var(--ease-out);
+    animation: paneEnter 140ms var(--ease-out);
   }
   .pane.active { display: flex; }
 
   @keyframes paneEnter {
-    from { opacity: 0; transform: scale(0.988) translateY(3px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ---- Minimal Cards ---- */
+  /* Cards */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 12px 15px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    border-radius: 11px;
+    padding: 11px 14px;
   }
 
   .card-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: 9px;
   }
 
   .card-label {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted);
+    color: var(--text);
   }
 
   .text-link {
@@ -361,58 +363,52 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     cursor: pointer;
     padding: 2px 4px;
     border-radius: 4px;
-    transition: opacity 140ms ease, transform 140ms var(--ease-out);
+    transition: opacity 130ms ease, transform 130ms var(--ease-out);
   }
   .text-link:hover { opacity: 0.85; text-decoration: underline; }
   .text-link:active { transform: scale(0.96); }
 
-  /* ---- Mode Cards ---- */
+  /* Mode Buttons */
   .mode-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 7px;
   }
 
-  .mode-card {
-    text-align: left;
-    background: rgba(255, 255, 255, 0.02);
+  .mode-btn {
+    height: 36px;
+    border-radius: 8px;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 11px 12px;
-    cursor: pointer;
-    color: var(--text);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text-secondary);
     font-family: inherit;
-    transition: transform 140ms var(--ease-out), border-color 150ms ease, background-color 150ms ease;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: transform 130ms var(--ease-out), border-color 140ms ease, background-color 140ms ease, color 140ms ease;
   }
-  .mode-card:hover {
-    background: rgba(255, 255, 255, 0.04);
+  .mode-btn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.05);
     border-color: var(--border-strong);
   }
-  .mode-card:active { transform: scale(0.975); }
-  .mode-card.selected {
-    background: rgba(91, 140, 255, 0.08);
-    border-color: rgba(91, 140, 255, 0.55);
+  .mode-btn:active { transform: scale(0.97); }
+  .mode-btn.selected {
+    color: var(--text);
+    background: rgba(91, 140, 255, 0.13);
+    border-color: rgba(91, 140, 255, 0.58);
   }
-  .mode-card.selected.local-sel {
-    background: rgba(52, 211, 153, 0.08);
+  .mode-btn.selected.local-sel {
+    color: var(--text);
+    background: rgba(52, 211, 153, 0.12);
     border-color: rgba(52, 211, 153, 0.55);
   }
 
-  .mode-title {
-    font-size: 13px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 3px;
-  }
-  .mode-desc {
-    font-size: 11.5px;
-    color: var(--text-secondary);
-    line-height: 1.35;
-  }
-
-  /* ---- Provider Pills ---- */
+  /* Segmented Pills */
   .pill-group {
     display: inline-flex;
     background: var(--bg);
@@ -429,58 +425,57 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     font-family: inherit;
     font-size: 11.5px;
     font-weight: 500;
-    padding: 4px 10px;
+    padding: 4.5px 10px;
     border-radius: 6px;
     cursor: pointer;
-    transition: transform 130ms var(--ease-out), background-color 140ms ease, color 140ms ease;
+    transition: transform 120ms var(--ease-out), background-color 130ms ease, color 130ms ease;
   }
   .pill-opt:hover { color: var(--text); }
   .pill-opt:active { transform: scale(0.96); }
   .pill-opt.active {
     background: var(--surface-2);
     color: var(--text);
+    font-weight: 600;
     box-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
 
-  /* ---- 8-Model Provider Grid ---- */
+  /* 8-Provider Grid */
   .provider-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
-    margin-bottom: 10px;
   }
 
   .prov-chip {
-    height: 30px;
+    height: 31px;
     padding: 0 8px;
     border-radius: 7px;
     border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.025);
     color: var(--text-secondary);
     font-family: inherit;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 5px;
     cursor: pointer;
-    transition: transform 130ms var(--ease-out), border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+    transition: transform 120ms var(--ease-out), border-color 130ms ease, background-color 130ms ease, color 130ms ease;
   }
   .prov-chip:hover {
     color: var(--text);
-    background: rgba(255, 255, 255, 0.045);
+    background: rgba(255, 255, 255, 0.05);
     border-color: var(--border-strong);
   }
-  .prov-chip:active {
-    transform: scale(0.96);
-  }
+  .prov-chip:active { transform: scale(0.96); }
   .prov-chip.active {
     background: rgba(91, 140, 255, 0.13);
     border-color: rgba(91, 140, 255, 0.58);
     color: var(--text);
     font-weight: 600;
   }
+
   .prov-dot {
     width: 5px;
     height: 5px;
@@ -489,9 +484,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     display: none;
     flex-shrink: 0;
   }
-  .prov-chip.has-key .prov-dot {
-    display: inline-block;
-  }
+  .prov-chip.has-key .prov-dot { display: inline-block; }
 
   .custom-endpoint-row {
     display: none;
@@ -499,16 +492,14 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     gap: 7px;
     margin-top: 8px;
   }
-  .custom-endpoint-row.visible {
-    display: grid;
-  }
+  .custom-endpoint-row.visible { display: grid; }
 
-  /* ---- API Key Input + Inline Apply Button ---- */
+  /* Key Input + Apply */
   .key-row {
     display: flex;
     align-items: center;
     gap: 7px;
-    margin-top: 10px;
+    margin-top: 8px;
   }
 
   .input-box {
@@ -518,13 +509,11 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 0 6px 0 11px;
-    height: 36px;
-    transition: border-color 140ms ease;
+    padding: 0 5px 0 10px;
+    height: 35px;
+    transition: border-color 130ms ease;
   }
-  .input-box:focus-within {
-    border-color: rgba(91, 140, 255, 0.65);
-  }
+  .input-box:focus-within { border-color: rgba(91, 140, 255, 0.65); }
 
   .input-box input {
     flex: 1;
@@ -542,8 +531,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   }
 
   .mini-btn {
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
     color: var(--text-secondary);
     font-family: inherit;
     font-size: 11px;
@@ -553,13 +542,13 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     border-radius: 5px;
     cursor: pointer;
     margin-left: 4px;
-    transition: transform 130ms var(--ease-out), background-color 130ms ease, color 130ms ease;
+    transition: transform 120ms var(--ease-out), background-color 120ms ease, color 120ms ease;
   }
-  .mini-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+  .mini-btn:hover { background: rgba(255, 255, 255, 0.11); color: var(--text); }
   .mini-btn:active { transform: scale(0.95); }
 
   .btn-primary {
-    height: 36px;
+    height: 35px;
     padding: 0 15px;
     border-radius: 8px;
     border: none;
@@ -570,58 +559,53 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: transform 140ms var(--ease-out), opacity 140ms ease, background-color 140ms ease;
+    transition: transform 130ms var(--ease-out), opacity 130ms ease;
   }
   .btn-primary:hover { opacity: 0.92; }
   .btn-primary:active { transform: scale(0.96); }
   .btn-primary:disabled { opacity: 0.5; cursor: default; transform: none; }
 
   .key-feedback {
-    margin-top: 8px;
+    margin-top: 6px;
     font-size: 11.5px;
-    min-height: 17px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    min-height: 15px;
     color: var(--text-muted);
   }
+  .key-feedback:empty { display: none; }
   .key-feedback.ok { color: var(--green); }
   .key-feedback.err { color: var(--red); }
 
-  /* ---- Setting Rows ---- */
+  /* Rows */
   .row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    padding: 6.5px 0;
+    gap: 12px;
+    padding: 7px 0;
   }
   .row + .row {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.055);
   }
+  .row:first-child { padding-top: 2px; }
+  .row:last-child { padding-bottom: 2px; }
 
   .row-title {
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 500;
     color: var(--text);
   }
-  .row-sub {
-    font-size: 11.5px;
-    color: var(--text-muted);
-    margin-top: 1px;
-  }
 
-  /* ---- Minimal Switch ---- */
+  /* Switch */
   .switch {
     position: relative;
     width: 38px;
     height: 22px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.13);
     border: none;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background-color 160ms ease, transform 130ms var(--ease-out);
+    transition: background-color 150ms ease, transform 120ms var(--ease-out);
   }
   .switch:active { transform: scale(0.94); }
   .switch.on { background: var(--blue); }
@@ -635,47 +619,55 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     border-radius: 50%;
     background: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.35);
-    transition: transform 160ms var(--ease-out);
+    transition: transform 150ms var(--ease-out);
   }
-  .switch.on::after {
-    transform: translateX(16px);
-  }
+  .switch.on::after { transform: translateX(16px); }
 
-  /* ---- Minimal Select ---- */
+  /* Select */
   select.clean-select {
     background: var(--bg);
     color: var(--text);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    height: 32px;
+    border-radius: 7px;
+    height: 31px;
     padding: 0 10px;
     font-family: inherit;
     font-size: 12px;
     outline: none;
     cursor: pointer;
-    max-width: 230px;
+    max-width: 220px;
   }
   select.clean-select:focus { border-color: var(--border-strong); }
 
-  /* ---- History List ---- */
+  /* History */
+  .hist-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px 2px;
+  }
+  .hist-count {
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
   .hist-item {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 11px;
-    padding: 12px 14px;
+    border-radius: 10px;
+    padding: 10px 13px;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
   }
   .hist-meta {
     font-size: 11px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
   .hist-text {
-    font-size: 13px;
+    font-size: 12.5px;
     color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
@@ -683,26 +675,26 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   }
   .empty-state {
     text-align: center;
-    padding: 48px 20px;
+    padding: 52px 20px;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: 12.5px;
   }
 
-  /* ---- Sticky Footer (Never clips at any DPI!) ---- */
+  /* Footer */
   .footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 11px 22px 14px;
+    padding: 10px 20px 13px;
     border-top: 1px solid var(--border);
-    background: rgba(10, 11, 14, 0.92);
+    background: var(--bg);
     flex-shrink: 0;
   }
 
   .kbd-hint {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-size: 11.5px;
     color: var(--text-muted);
   }
@@ -720,71 +712,50 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 </head>
 <body>
 <div class="app">
-  <!-- Header -->
   <header class="header">
     <div class="brand">
       <div class="logo-mark">
-        <span style="height:8px"></span>
-        <span style="height:15px"></span>
-        <span style="height:11px"></span>
+        <span style="height:7px"></span>
+        <span style="height:14px"></span>
+        <span style="height:10px"></span>
         <span style="height:6px"></span>
       </div>
       <span class="brand-title">WinFlow</span>
       <span class="status-chip" id="headerStatus">
         <span class="status-dot" id="headerDot"></span>
-        <span id="headerModeText">Ready</span>
+        <span id="headerModeText">Offline</span>
       </span>
     </div>
-    <button class="icon-btn" id="btnSoundToggle" onclick="toggleUiSounds()" title="Toggle tactile button sounds">
-      <svg id="soundSvgOn" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
-      <svg id="soundSvgOff" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-      <span id="soundLabel">Sound On</span>
+    <button class="icon-btn" id="btnSoundToggle" onclick="toggleUiSounds()">
+      <svg id="soundSvgOn" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+      <svg id="soundSvgOff" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+      <span id="soundLabel">Sound</span>
     </button>
   </header>
 
-  <!-- Segmented Navigation -->
   <div class="nav-wrap">
     <div class="segmented-nav">
       <div class="nav-pill-bg" id="navIndicator"></div>
       <button class="nav-tab active" onclick="switchTab(0)">Engine</button>
-      <button class="nav-tab" onclick="switchTab(1)">Preferences</button>
+      <button class="nav-tab" onclick="switchTab(1)">Settings</button>
       <button class="nav-tab" onclick="switchTab(2)">History</button>
     </div>
   </div>
 
-  <!-- Scrollable Main Area -->
   <main class="content">
-    <!-- TAB 0: ENGINE, HINGLISH & MULTI-MODEL API KEYS -->
+    <!-- TAB 0: ENGINE -->
     <section class="pane active" id="pane-0">
       <div class="card">
-        <div class="card-head">
-          <span class="card-label">Dictation Engine & Language</span>
-        </div>
         <div class="mode-grid">
-          <button class="mode-card" id="cardCloud" onclick="selectEngineMode('cloud')">
-            <div class="mode-title">
-              <span>Cloud AI</span>
-              <span style="font-size:11px;color:var(--blue)">~0.8s</span>
-            </div>
-            <div class="mode-desc">Instant Whisper + AI filler & Hinglish cleanup. Zero PC load.</div>
-          </button>
-          <button class="mode-card local-sel" id="cardLocal" onclick="selectEngineMode('local')">
-            <div class="mode-title">
-              <span>Offline Local</span>
-              <span style="font-size:11px;color:var(--green)">Private</span>
-            </div>
-            <div class="mode-desc">Runs faster-whisper locally on your PC. No API key needed.</div>
-          </button>
+          <button class="mode-btn" id="cardCloud" onclick="selectEngineMode('cloud')">Cloud</button>
+          <button class="mode-btn local-sel" id="cardLocal" onclick="selectEngineMode('local')">Offline</button>
         </div>
 
-        <div class="row" style="margin-top:10px;padding-top:9px;padding-bottom:0;border-top:1px solid rgba(255,255,255,0.055)">
-          <div>
-            <div class="row-title">Dictation Language</div>
-            <div class="row-sub" id="langSubHint">English-lock prevents foreign script hallucinations</div>
-          </div>
+        <div class="row" style="margin-top:9px;padding-top:9px;padding-bottom:0;border-top:1px solid rgba(255,255,255,0.055)">
+          <span class="row-title">Language</span>
           <div class="pill-group">
             <button class="pill-opt" data-lang="en" onclick="setLanguage('en')">English</button>
-            <button class="pill-opt" data-lang="hinglish" onclick="setLanguage('hinglish')" title="Speak Hindi + English -> writes in English letters like 'Apna'">Hinglish</button>
+            <button class="pill-opt" data-lang="hinglish" onclick="setLanguage('hinglish')">Hinglish</button>
             <button class="pill-opt" data-lang="hi" onclick="setLanguage('hi')">Hindi</button>
             <button class="pill-opt" data-lang="auto" onclick="setLanguage('auto')">Auto</button>
           </div>
@@ -792,20 +763,20 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="card">
-        <div class="card-head" style="margin-bottom:8px">
-          <span class="card-label" style="margin:0">AI Model Provider & API Key</span>
-          <button class="text-link" id="btnGetKey" onclick="openKeyPortal()">Get free Groq key ↗</button>
+        <div class="card-head">
+          <span class="card-label">Provider</span>
+          <button class="text-link" id="btnGetKey" onclick="openKeyPortal()">Get Key ↗</button>
         </div>
 
         <div class="provider-grid">
           <button class="prov-chip" data-prov="groq" onclick="selectProvider('groq')"><span class="prov-dot"></span><span>Groq</span></button>
           <button class="prov-chip" data-prov="gemini" onclick="selectProvider('gemini')"><span class="prov-dot"></span><span>Gemini</span></button>
-          <button class="prov-chip" data-prov="openai" onclick="selectProvider('openai')"><span class="prov-dot"></span><span>OpenAI GPT</span></button>
+          <button class="prov-chip" data-prov="openai" onclick="selectProvider('openai')"><span class="prov-dot"></span><span>GPT</span></button>
           <button class="prov-chip" data-prov="anthropic" onclick="selectProvider('anthropic')"><span class="prov-dot"></span><span>Claude</span></button>
-          <button class="prov-chip" data-prov="xai" onclick="selectProvider('xai')"><span class="prov-dot"></span><span>xAI Grok</span></button>
+          <button class="prov-chip" data-prov="xai" onclick="selectProvider('xai')"><span class="prov-dot"></span><span>Grok</span></button>
           <button class="prov-chip" data-prov="nvidia" onclick="selectProvider('nvidia')"><span class="prov-dot"></span><span>NVIDIA</span></button>
           <button class="prov-chip" data-prov="kimi" onclick="selectProvider('kimi')"><span class="prov-dot"></span><span>Kimi</span></button>
-          <button class="prov-chip" data-prov="custom" onclick="selectProvider('custom')"><span class="prov-dot"></span><span>Custom +</span></button>
+          <button class="prov-chip" data-prov="custom" onclick="selectProvider('custom')"><span class="prov-dot"></span><span>Custom</span></button>
         </div>
 
         <div class="custom-endpoint-row" id="customEndpointRow">
@@ -813,7 +784,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
             <input
               type="text"
               id="customBaseUrlInput"
-              placeholder="https://openrouter.ai/api/v1"
+              placeholder="Base URL"
               spellcheck="false"
               oninput="state.custom_base_url = this.value.trim()"
             />
@@ -822,41 +793,36 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
             <input
               type="text"
               id="customModelInput"
-              placeholder="Model (e.g. openai/gpt-4o-mini)"
+              placeholder="Model"
               spellcheck="false"
               oninput="state.custom_model = this.value.trim()"
             />
           </div>
         </div>
 
-        <div class="key-row" style="margin-top:8px">
+        <div class="key-row">
           <div class="input-box">
             <input
               type="password"
               id="apiKeyInput"
-              placeholder="Paste gsk_... key here"
+              placeholder="API Key"
               autocomplete="off"
               spellcheck="false"
               oninput="onKeyInputChanged()"
               onkeydown="if(event.key==='Enter'){applyApiKey();}"
             />
-            <button class="mini-btn" onclick="pasteFromClipboard()" title="Paste from clipboard">Paste</button>
-            <button class="mini-btn" id="btnReveal" onclick="toggleRevealKey()" title="Show or hide key">Show</button>
+            <button class="mini-btn" onclick="pasteFromClipboard()">Paste</button>
+            <button class="mini-btn" id="btnReveal" onclick="toggleRevealKey()">Show</button>
           </div>
-          <button class="btn-primary" id="btnApplyKey" onclick="applyApiKey()">Apply Key</button>
+          <button class="btn-primary" id="btnApplyKey" onclick="applyApiKey()">Apply</button>
         </div>
 
-        <div class="key-feedback" id="keyFeedback">
-          <span id="keyStatusMsg">Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 (~0.8s).</span>
-        </div>
+        <div class="key-feedback" id="keyFeedback"><span id="keyStatusMsg"></span></div>
       </div>
 
       <div class="card">
-        <div class="row" style="padding:0">
-          <div>
-            <div class="row-title">Offline Whisper Model</div>
-            <div class="row-sub">Runs 100% locally in Offline mode (auto-unloaded from RAM in Cloud mode)</div>
-          </div>
+        <div class="row">
+          <span class="row-title">Offline Model</span>
           <div class="pill-group">
             <button class="pill-opt" data-model="tiny" onclick="setLocalModel('tiny')">Tiny</button>
             <button class="pill-opt" data-model="base" onclick="setLocalModel('base')">Base</button>
@@ -866,71 +832,46 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       </div>
     </section>
 
-    <!-- TAB 1: PREFERENCES -->
+    <!-- TAB 1: SETTINGS -->
     <section class="pane" id="pane-1">
       <div class="card">
-        <div class="card-head" style="margin-bottom:4px">
-          <span class="card-label">AI Speech Cleanup</span>
-        </div>
-
         <div class="row">
-          <div>
-            <div class="row-title">Remove Filler Words & Stutters</div>
-            <div class="row-sub">Strips "um", "uh", "you know" and repeats like "can Can"</div>
-          </div>
+          <span class="row-title">Remove Filler Words</span>
           <button class="switch" id="swFillers" onclick="toggleBool('remove_fillers', 'swFillers')"></button>
         </div>
 
         <div class="row">
-          <div>
-            <div class="row-title">Smart Punctuation & Voice Breaks</div>
-            <div class="row-sub">Auto-capitalizes and turns "new line" into line breaks</div>
-          </div>
+          <span class="row-title">Smart Punctuation</span>
           <button class="switch" id="swSmartFmt" onclick="toggleBool('smart_formatting', 'swSmartFmt')"></button>
         </div>
 
         <div class="row">
-          <div>
-            <div class="row-title">Writing Style</div>
-            <div class="row-sub">Natural preserves your exact wording</div>
-          </div>
+          <span class="row-title">Style</span>
           <div class="pill-group">
             <button class="pill-opt" data-style="clean" onclick="setStyleMode('clean')">Natural</button>
             <button class="pill-opt" data-style="polished" onclick="setStyleMode('polished')">Polished</button>
-            <button class="pill-opt" data-style="raw" onclick="setStyleMode('raw')">Verbatim</button>
+            <button class="pill-opt" data-style="raw" onclick="setStyleMode('raw')">Raw</button>
           </div>
         </div>
 
-        <div class="row" style="flex-direction:column;align-items:stretch;gap:7px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <span class="row-title">Custom Vocabulary</span>
-            <span class="row-sub" style="margin:0">Comma-separated names & jargon</span>
-          </div>
-          <div class="key-row" style="margin-top:0">
-            <div class="input-box" style="height:34px">
-              <input
-                type="text"
-                id="dictInput"
-                style="font-family:inherit"
-                placeholder="Wispr Flow, WinFlow, GitHub, Windows"
-                oninput="state.custom_dictionary = this.value"
-                onkeydown="if(event.key==='Enter'){saveAllSettings(true);}"
-              />
-            </div>
+        <div class="row">
+          <span class="row-title">Custom Words</span>
+          <div class="input-box" style="max-width:220px;height:31px">
+            <input
+              type="text"
+              id="dictInput"
+              style="font-family:inherit"
+              placeholder="Add words"
+              oninput="state.custom_dictionary = this.value"
+              onkeydown="if(event.key==='Enter'){saveAllSettings(true);}"
+            />
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-head" style="margin-bottom:4px">
-          <span class="card-label">Shortcut & System</span>
-        </div>
-
         <div class="row">
-          <div>
-            <div class="row-title">Alt + X Trigger Mode</div>
-            <div class="row-sub">Hybrid: quick tap toggles, holding acts as push-to-talk</div>
-          </div>
+          <span class="row-title">Shortcut</span>
           <div class="pill-group">
             <button class="pill-opt" data-hk="hybrid" onclick="setHotkeyMode('hybrid')">Hybrid</button>
             <button class="pill-opt" data-hk="toggle" onclick="setHotkeyMode('toggle')">Toggle</button>
@@ -939,34 +880,22 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
         </div>
 
         <div class="row">
-          <div>
-            <div class="row-title">Microphone</div>
-            <div class="row-sub">Audio input device</div>
-          </div>
+          <span class="row-title">Microphone</span>
           <select class="clean-select" id="micSelect" onchange="onMicChanged()"></select>
         </div>
 
         <div class="row">
-          <div>
-            <div class="row-title">Restore Previous Clipboard</div>
-            <div class="row-sub">Preserves copied items after pasting dictation</div>
-          </div>
+          <span class="row-title">Restore Clipboard</span>
           <button class="switch" id="swClipboard" onclick="toggleBool('restore_clipboard', 'swClipboard')"></button>
         </div>
 
         <div class="row">
-          <div>
-            <div class="row-title">Dictation Start / Stop Chimes</div>
-            <div class="row-sub">Subtle acoustic cue on Alt + X</div>
-          </div>
+          <span class="row-title">Dictation Sounds</span>
           <button class="switch" id="swCues" onclick="toggleBool('sound_cues', 'swCues')"></button>
         </div>
 
-        <div class="row" style="padding-bottom:2px">
-          <div>
-            <div class="row-title">Launch at Windows Sign-In</div>
-            <div class="row-sub">Start silently in system tray on boot</div>
-          </div>
+        <div class="row">
+          <span class="row-title">Launch at Startup</span>
           <button class="switch" id="swStartup" onclick="toggleStartup()"></button>
         </div>
       </div>
@@ -978,77 +907,25 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     </section>
   </main>
 
-  <!-- Sticky Footer (Always visible on every screen & DPI scale!) -->
   <footer class="footer">
     <div class="kbd-hint">
-      <kbd>Alt</kbd> + <kbd>X</kbd> <span>WinFlow</span>
-      <span style="opacity:0.35">•</span>
-      <kbd>Win</kbd> + <kbd>H</kbd> <span>Native intact</span>
+      <kbd>Alt</kbd> + <kbd>X</kbd>
     </div>
-    <button class="btn-primary" id="btnSaveAll" onclick="saveAllSettings(true)">Apply & Save</button>
+    <button class="btn-primary" id="btnSaveAll" style="height:32px;padding:0 16px" onclick="saveAllSettings(true)">Save</button>
   </footer>
 </div>
 
 <script>
-  // ---- Precision Web Audio Micro-Acoustics ----
   let audioCtx = null;
   const PROVIDERS = {
-    groq: {
-      badge: "Groq Turbo",
-      placeholder: "Paste gsk_... Groq API key",
-      portalLabel: "Get free Groq key ↗",
-      portalUrl: "https://console.groq.com/keys",
-      hint: "Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 (~0.8s)."
-    },
-    gemini: {
-      badge: "Gemini Flash",
-      placeholder: "Paste AIza... / AQ... Gemini API key",
-      portalLabel: "Get free Gemini key ↗",
-      portalUrl: "https://aistudio.google.com/apikey",
-      hint: "Google Gemini 3.5 Flash Lite single-pass audio & Hinglish cleanup."
-    },
-    openai: {
-      badge: "OpenAI GPT",
-      placeholder: "Paste sk-... OpenAI GPT API key",
-      portalLabel: "Get OpenAI key ↗",
-      portalUrl: "https://platform.openai.com/api-keys",
-      hint: "OpenAI GPT-4o Mini Transcribe + GPT-4o Mini cleanup."
-    },
-    anthropic: {
-      badge: "Anthropic Claude",
-      placeholder: "Paste sk-ant-... Claude API key",
-      portalLabel: "Get Claude key ↗",
-      portalUrl: "https://console.anthropic.com/settings/keys",
-      hint: "Anthropic Claude Haiku / Sonnet cleanup & Hinglish Romanizer."
-    },
-    xai: {
-      badge: "xAI Grok",
-      placeholder: "Paste xai-... Elon Musk's Grok API key",
-      portalLabel: "Get xAI Grok key ↗",
-      portalUrl: "https://console.x.ai/",
-      hint: "Elon Musk's xAI Grok fast cleanup & Hinglish Romanizer."
-    },
-    nvidia: {
-      badge: "NVIDIA NIM",
-      placeholder: "Paste nvapi-... NVIDIA NIM API key",
-      portalLabel: "Get free NVIDIA key ↗",
-      portalUrl: "https://build.nvidia.com/explore/discover",
-      hint: "NVIDIA Build NIM (Llama / Nemotron / Qwen) cleanup & Hinglish."
-    },
-    kimi: {
-      badge: "Moonshot Kimi",
-      placeholder: "Paste sk-... Moonshot Kimi API key",
-      portalLabel: "Get Kimi key ↗",
-      portalUrl: "https://platform.moonshot.ai/console/api-keys",
-      hint: "Moonshot AI Kimi K2 cleanup & Hinglish (.ai & .cn supported)."
-    },
-    custom: {
-      badge: "Custom API",
-      placeholder: "Paste sk-... OpenRouter / DeepSeek / Custom key",
-      portalLabel: "OpenRouter keys ↗",
-      portalUrl: "https://openrouter.ai/keys",
-      hint: "Any OpenAI-compatible API (OpenRouter, DeepSeek, Together, Ollama)."
-    }
+    groq: { badge: "Groq", portalUrl: "https://console.groq.com/keys" },
+    gemini: { badge: "Gemini", portalUrl: "https://aistudio.google.com/apikey" },
+    openai: { badge: "GPT", portalUrl: "https://platform.openai.com/api-keys" },
+    anthropic: { badge: "Claude", portalUrl: "https://console.anthropic.com/settings/keys" },
+    xai: { badge: "Grok", portalUrl: "https://console.x.ai/" },
+    nvidia: { badge: "NVIDIA", portalUrl: "https://build.nvidia.com/explore/discover" },
+    kimi: { badge: "Kimi", portalUrl: "https://platform.moonshot.ai/console/api-keys" },
+    custom: { badge: "Custom", portalUrl: "https://openrouter.ai/keys" }
   };
 
   let state = {
@@ -1089,7 +966,6 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       const now = ctx.currentTime;
 
       if (kind === "press" || kind === "unmute") {
-        // Tactile mechanical switch click (15ms)
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = "triangle";
@@ -1134,7 +1010,6 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
         osc.start(now);
         osc.stop(now + 0.04);
       } else if (kind === "apply") {
-        // Warm fifth chord (F5 + C6)
         [698.46, 1046.5].forEach((freq, idx) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
@@ -1182,17 +1057,14 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   function syncKeyInputFromProvider() {
     const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
     const inp = document.getElementById("apiKeyInput");
-    const btnLink = document.getElementById("btnGetKey");
     inp.value = getProviderKey(state.cloud_provider);
-    inp.placeholder = spec.placeholder;
-    btnLink.textContent = spec.portalLabel;
-    document.getElementById("customBaseUrlInput").value = state.custom_base_url || "https://openrouter.ai/api/v1";
+    inp.placeholder = `${spec.badge} API Key`;
+    document.getElementById("customBaseUrlInput").value = state.custom_base_url || "";
     document.getElementById("customModelInput").value = state.custom_model || "";
   }
 
   function renderUI() {
     const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
-    // Header chip
     const dot = document.getElementById("headerDot");
     const txt = document.getElementById("headerModeText");
     const langSuffix = state.language === "hinglish" ? " • Hinglish" : "";
@@ -1201,42 +1073,24 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       txt.textContent = spec.badge + langSuffix;
     } else {
       dot.className = "status-dot";
-      txt.textContent = `Offline (${state.local_model_size})${langSuffix}`;
+      txt.textContent = "Offline" + langSuffix;
     }
 
-    // Language subtitle helper
-    const langHints = {
-      en: "English-lock prevents foreign script hallucinations",
-      hinglish: 'Hindi spoken → English letters (e.g. "Bhai apna kaam kar lo")',
-      hi: "Outputs native Devanagari Hindi script (अपना काम कर लो)",
-      auto: "Automatically detects spoken language"
-    };
-    const langSub = document.getElementById("langSubHint");
-    if (langSub) {
-      langSub.textContent = langHints[state.language] || langHints.en;
-      langSub.style.color = state.language === "hinglish" ? "var(--blue)" : "var(--text-muted)";
-    }
-
-    // Sound toggle button
     document.getElementById("soundSvgOn").style.display = state.ui_sounds ? "block" : "none";
     document.getElementById("soundSvgOff").style.display = state.ui_sounds ? "none" : "block";
-    document.getElementById("soundLabel").textContent = state.ui_sounds ? "Sound On" : "Muted";
+    document.getElementById("soundLabel").textContent = state.ui_sounds ? "Sound" : "Muted";
 
-    // Mode cards
     document.getElementById("cardCloud").classList.toggle("selected", state.engine_mode === "cloud");
     document.getElementById("cardLocal").classList.toggle("selected", state.engine_mode === "local");
 
-    // 8-Provider grid chips + saved key emerald dot
     document.querySelectorAll("[data-prov]").forEach(el => {
       const p = el.dataset.prov;
       el.classList.toggle("active", p === state.cloud_provider);
       el.classList.toggle("has-key", !!getProviderKey(p));
     });
 
-    // Custom endpoint fields visibility
     document.getElementById("customEndpointRow").classList.toggle("visible", state.cloud_provider === "custom");
 
-    // Pill groups
     document.querySelectorAll("[data-model]").forEach(el =>
       el.classList.toggle("active", el.dataset.model === state.local_model_size)
     );
@@ -1250,7 +1104,6 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       el.classList.toggle("active", el.dataset.hk === state.hotkey_mode)
     );
 
-    // Switches
     document.getElementById("swFillers").classList.toggle("on", !!state.remove_fillers);
     document.getElementById("swSmartFmt").classList.toggle("on", !!state.smart_formatting);
     document.getElementById("swClipboard").classList.toggle("on", !!state.restore_clipboard);
@@ -1267,18 +1120,38 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   function renderHistory() {
     const box = document.getElementById("historyContainer");
     if (!state.history || state.history.length === 0) {
-      box.innerHTML = `<div class="empty-state">No dictations yet.<br/>Press <kbd>Alt</kbd> + <kbd>X</kbd> in any app and speak naturally.</div>`;
+      box.innerHTML = `<div class="empty-state">No history yet.</div>`;
       return;
     }
     box.innerHTML = "";
-    state.history.slice(0, 25).forEach((item, idx) => {
+    const top = document.createElement("div");
+    top.className = "hist-head";
+    const cnt = document.createElement("span");
+    cnt.className = "hist-count";
+    cnt.textContent = `${state.history.length} recent`;
+    const clr = document.createElement("button");
+    clr.className = "icon-btn";
+    clr.textContent = "Clear";
+    clr.onclick = async () => {
+      uiTone("press");
+      if (window.pywebview && window.pywebview.api) {
+        await window.pywebview.api.clear_history();
+      }
+      state.history = [];
+      renderHistory();
+    };
+    top.appendChild(cnt);
+    top.appendChild(clr);
+    box.appendChild(top);
+
+    state.history.slice(0, 25).forEach(item => {
       const div = document.createElement("div");
       div.className = "hist-item";
       const left = document.createElement("div");
       left.style.flex = "1";
       const meta = document.createElement("div");
       meta.className = "hist-meta";
-      meta.textContent = `${item.timestamp || ""}  •  ${item.mode || ""}  •  ${item.latency_ms || 0} ms`;
+      meta.textContent = `${item.timestamp || ""} • ${item.mode || ""}`;
       const body = document.createElement("div");
       body.className = "hist-text";
       body.textContent = item.cleaned || "";
@@ -1291,8 +1164,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       btn.onclick = async () => {
         uiTone("press");
         await window.pywebview.api.copy_text(item.cleaned || "");
-        btn.textContent = "Copied ✓";
-        setTimeout(() => { btn.textContent = "Copy"; }, 1100);
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1000);
       };
       div.appendChild(left);
       div.appendChild(btn);
@@ -1302,8 +1175,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
   function setFeedback(msg, kind = "") {
     const box = document.getElementById("keyFeedback");
-    box.className = "key-feedback " + kind;
-    document.getElementById("keyStatusMsg").textContent = msg;
+    box.className = kind ? `key-feedback ${kind}` : "key-feedback";
+    document.getElementById("keyStatusMsg").textContent = msg || "";
   }
 
   function captureCurrentKeyInput() {
@@ -1314,11 +1187,9 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   }
 
   function onKeyInputChanged() {
-    const val = captureCurrentKeyInput();
+    captureCurrentKeyInput();
     renderUI();
-    if (val) {
-      setFeedback("Click Apply Key (or press Enter) to verify & activate.", "");
-    }
+    setFeedback("");
   }
 
   function selectProvider(prov) {
@@ -1327,23 +1198,16 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     state.cloud_provider = prov;
     syncKeyInputFromProvider();
     renderUI();
-    const spec = PROVIDERS[prov] || PROVIDERS.groq;
-    const hasKey = !!getProviderKey(prov);
-    setFeedback(
-      hasKey ? `✓ ${spec.badge} key saved — click Apply Key to switch & verify.` : spec.hint,
-      hasKey ? "ok" : ""
-    );
+    setFeedback(getProviderKey(prov) ? "Key saved" : "", getProviderKey(prov) ? "ok" : "");
   }
 
   async function selectEngineMode(mode) {
     captureCurrentKeyInput();
-    if (mode === "cloud") {
-      if (!getProviderKey(state.cloud_provider)) {
-        uiTone("error");
-        setFeedback("Paste an API key below and click Apply Key first.", "err");
-        document.getElementById("apiKeyInput").focus();
-        return;
-      }
+    if (mode === "cloud" && !getProviderKey(state.cloud_provider)) {
+      uiTone("error");
+      setFeedback("Enter an API key first", "err");
+      document.getElementById("apiKeyInput").focus();
+      return;
     }
     uiTone("press");
     state.engine_mode = mode;
@@ -1360,7 +1224,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       inp.value = clip.trim();
       captureCurrentKeyInput();
       renderUI();
-      setFeedback("Key pasted — click Apply Key to activate.", "");
+      setFeedback("");
     }
   }
 
@@ -1389,7 +1253,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     state.custom_model = document.getElementById("customModelInput").value.trim();
     if (!keyVal) {
       uiTone("error");
-      setFeedback("Please paste an API key first.", "err");
+      setFeedback("Enter an API key", "err");
       document.getElementById("apiKeyInput").focus();
       return;
     }
@@ -1397,8 +1261,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     uiTone("press");
     const btn = document.getElementById("btnApplyKey");
     btn.disabled = true;
-    btn.textContent = "Checking…";
-    setFeedback("Verifying API key…", "");
+    btn.textContent = "…";
+    setFeedback("");
 
     try {
       const res = await window.pywebview.api.verify_and_apply_key(
@@ -1411,20 +1275,20 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
         state.engine_mode = "cloud";
         renderUI();
         uiTone("apply");
-        btn.textContent = "Applied ✓";
-        setFeedback(res.message || "Connected! Active on Alt + X.", "ok");
-        setTimeout(() => { btn.textContent = "Apply Key"; btn.disabled = false; }, 1300);
+        btn.textContent = "Applied";
+        setFeedback(res.message || "Active", "ok");
+        setTimeout(() => { btn.textContent = "Apply"; btn.disabled = false; }, 1100);
       } else {
         uiTone("error");
-        btn.textContent = "Apply Key";
+        btn.textContent = "Apply";
         btn.disabled = false;
-        setFeedback(res.message || "Invalid API key — please check and try again.", "err");
+        setFeedback(res.message || "Invalid key", "err");
       }
     } catch (err) {
-      btn.textContent = "Apply Key";
+      btn.textContent = "Apply";
       btn.disabled = false;
       uiTone("error");
-      setFeedback("Could not verify key right now.", "err");
+      setFeedback("Connection error", "err");
     }
   }
 
@@ -1491,10 +1355,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     state.custom_base_url = document.getElementById("customBaseUrlInput").value.trim() || "https://openrouter.ai/api/v1";
     state.custom_model = document.getElementById("customModelInput").value.trim();
 
-    if (explicitClick) {
-      if (getProviderKey(state.cloud_provider) && state.engine_mode === "local") {
-        state.engine_mode = "cloud";
-      }
+    if (explicitClick && getProviderKey(state.cloud_provider) && state.engine_mode === "local") {
+      state.engine_mode = "cloud";
     }
 
     if (window.pywebview && window.pywebview.api) {
@@ -1505,9 +1367,8 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     if (explicitClick) {
       uiTone("apply");
       const btn = document.getElementById("btnSaveAll");
-      btn.textContent = "Applied ✓";
-      setFeedback("All settings saved & active on Alt + X.", "ok");
-      setTimeout(() => { btn.textContent = "Apply & Save"; }, 1200);
+      btn.textContent = "Saved";
+      setTimeout(() => { btn.textContent = "Save"; }, 1000);
     }
   }
 
@@ -1520,14 +1381,12 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     if (initial.initial_tab) {
       switchTab(initial.initial_tab, true);
     }
-    const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
     if (getProviderKey(state.cloud_provider) && state.engine_mode === "cloud") {
-      setFeedback(`✓ ${spec.badge} API key active on Alt + X.`, "ok");
+      setFeedback("Active", "ok");
     } else {
-      setFeedback(spec.hint, "");
+      setFeedback("");
     }
 
-    // Load microphones asynchronously so slow Bluetooth audio drivers NEVER block UI startup
     const mics = await window.pywebview.api.get_microphones();
     const sel = document.getElementById("micSelect");
     sel.innerHTML = "";
@@ -1585,6 +1444,11 @@ class _SettingsJsApi:
     def copy_text(self, text: str) -> bool:
         return set_clipboard_text(text)
 
+    def clear_history(self) -> bool:
+        self.config_mgr.clear_history()
+        signal_named_event(RELOAD_EVENT_NAME)
+        return True
+
     def open_url(self, url: str) -> None:
         webbrowser.open(url)
 
@@ -1600,10 +1464,10 @@ class _SettingsJsApi:
     ) -> dict[str, Any]:
         key = (api_key or "").strip()
         if not key:
-            return {"ok": False, "message": "API key cannot be empty."}
+            return {"ok": False, "message": "Enter an API key"}
 
         badge = PROVIDER_SPECS.get(provider, {}).get("badge", provider.upper())
-        verified_msg = f"✓ {badge} verified & activated on Alt + X!"
+        verified_msg = f"{badge} active"
 
         try:
             with httpx.Client(timeout=4.5, follow_redirects=True) as client:
@@ -1613,14 +1477,14 @@ class _SettingsJsApi:
                         headers={"x-goog-api-key": key},
                     )
                     if r.status_code in (400, 401, 403):
-                        return {"ok": False, "message": f"Gemini rejected this key ({r.status_code})."}
+                        return {"ok": False, "message": "Invalid API key"}
                 elif provider == "anthropic":
                     r = client.get(
                         "https://api.anthropic.com/v1/models",
                         headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
                     )
                     if r.status_code in (401, 403):
-                        return {"ok": False, "message": "Anthropic rejected this Claude API key."}
+                        return {"ok": False, "message": "Invalid API key"}
                 elif provider == "kimi":
                     r = client.get(
                         "https://api.moonshot.ai/v1/models",
@@ -1632,7 +1496,7 @@ class _SettingsJsApi:
                             headers={"Authorization": f"Bearer {key}"},
                         )
                         if r2.status_code in (401, 403):
-                            return {"ok": False, "message": "Moonshot Kimi rejected this API key."}
+                            return {"ok": False, "message": "Invalid API key"}
                 else:
                     endpoint_map = {
                         "groq": "https://api.groq.com/openai/v1/models",
@@ -1644,9 +1508,9 @@ class _SettingsJsApi:
                     check_url = endpoint_map.get(provider, endpoint_map["groq"])
                     r = client.get(check_url, headers={"Authorization": f"Bearer {key}"})
                     if r.status_code in (401, 403):
-                        return {"ok": False, "message": f"{badge} rejected this API key — check for typos."}
+                        return {"ok": False, "message": "Invalid API key"}
         except httpx.RequestError:
-            verified_msg = f"✓ {badge} key saved & activated (offline right now)."
+            verified_msg = f"{badge} saved"
 
         updates: dict[str, Any] = {
             "engine_mode": "cloud",
@@ -1696,13 +1560,12 @@ def _apply_dark_dwm_and_icon(title: str) -> None:
     try:
         dark = ctypes.c_int(1)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark), 4)
-        # DWMWA_CAPTION_COLOR = 35 (COLORREF 0x00BBGGRR -> #0A0B0E = 0x000E0B0A)
         cap_color = ctypes.c_int(0x000E0B0A)
         ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 35, ctypes.byref(cap_color), 4)
     except Exception:
         pass
 
-    ico = PROJECT_ROOT / "assets" / "winflow.ico"
+    ico = ASSET_ROOT / "assets" / "winflow.ico"
     if ico.exists():
         try:
             IMAGE_ICON = 1
@@ -1725,7 +1588,7 @@ def run_standalone_settings_window(
     import webview
 
     mutex = kernel32.CreateMutexW(None, False, SETTINGS_MUTEX_NAME)
-    if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+    if ctypes.get_last_error() == 183:
         signal_named_event(FOCUS_SETTINGS_EVENT_NAME)
         return 0
 
@@ -1738,9 +1601,9 @@ def run_standalone_settings_window(
         win_title,
         html=MINIMALIST_HTML,
         js_api=api,
-        width=580,
-        height=710,
-        min_size=(480, 460),
+        width=500,
+        height=600,
+        min_size=(460, 480),
         background_color="#0A0B0E",
     )
 

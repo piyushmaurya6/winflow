@@ -2,11 +2,11 @@
 
 ## Local Data & API Key Privacy
 
-- **Local-only credential storage:** Any Groq or Google Gemini API keys entered in WinFlow Settings are stored strictly on your own machine in `config.json` (excluded from Git via `.gitignore`). WinFlow has **zero telemetry, analytics, or third-party tracking servers**.
-- **100% Offline Mode:** When set to **Offline Local Whisper**, audio is captured in-memory, processed locally via `faster-whisper` (`local_files_only=True`), and discarded immediately after transcription — zero bytes leave your machine.
-- **Cloud Mode:** When set to **Free Cloud API**, trimmed 16 kHz mono WAV audio is transmitted directly over HTTPS (`TLS 1.2+`) only to the provider you selected (`api.groq.com` or `generativelanguage.googleapis.com`).
+- **Local-only credential storage:** API keys entered in WinFlow are stored strictly on your device (`%LOCALAPPDATA%\WinFlow\config.json`) and are never transmitted anywhere except the provider you explicitly select. WinFlow collects **zero telemetry or analytics**.
+- **Offline Mode:** Audio is processed locally in memory via `faster-whisper` (`local_files_only=True`) and discarded immediately after transcription.
+- **Native Binaries (No Script Downloaders):** WinFlow distributes a compiled 64-bit standalone installer (`WinFlow-Setup.exe`) and executable (`WinFlow.exe`) with zero `.bat` or `.vbs` downloader scripts.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in WinFlow, please open a private security advisory on GitHub at:
+Please report security issues privately via GitHub Security Advisories:
 https://github.com/piyushmaurya6/winflow/security/advisories/new

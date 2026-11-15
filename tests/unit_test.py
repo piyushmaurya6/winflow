@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 import tempfile
 import time
 from pathlib import Path
+
+os.environ.setdefault("WINFLOW_INSTANCE_ID", f"_unit_{os.getpid()}")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -24,7 +27,6 @@ from winflow.hotkey import (
     INPUT,
     KBDLLHOOKSTRUCT,
     LLKHF_ALTDOWN,
-    VK_ESCAPE,
     VK_LMENU,
     VK_LWIN,
     VK_X,
@@ -33,7 +35,7 @@ from winflow.hotkey import (
     WM_SYSKEYDOWN,
     WM_SYSKEYUP,
 )
-from winflow.settings_ui import SettingsWindowController, _SettingsJsApi
+from winflow.settings_ui import MINIMALIST_HTML, SettingsWindowController, _SettingsJsApi
 from winflow.sounds import _build_cue_wav, play_sound
 
 VK_H = 0x48
@@ -49,6 +51,14 @@ def _feed(hk: AltXHotkeyListener, vk: int, is_up: bool = False, alt_flag: bool =
 def test_win32_struct_sizes() -> None:
     expected = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
     assert ctypes.sizeof(INPUT) == expected, f"Expected {expected}, got {ctypes.sizeof(INPUT)}"
+
+
+def test_minimal_ui_has_no_overexplanation_or_examples() -> None:
+    assert "e.g." not in MINIMALIST_HTML
+    assert "Zero PC load" not in MINIMALIST_HTML
+    assert "hallucinations" not in MINIMALIST_HTML
+    assert "id=\"btnApplyKey\"" in MINIMALIST_HTML
+    assert "id=\"btnSaveAll\"" in MINIMALIST_HTML
 
 
 def test_cleaner_disfluencies_and_commands() -> None:
@@ -104,6 +114,7 @@ def test_config_and_settings_ipc() -> None:
         cfg_file = Path(td) / "cfg.json"
         cm = ConfigManager(cfg_file)
         assert cm.data.ui_sounds is True
+        assert cm.data.custom_dictionary == ""
 
         reloaded = []
         ctrl = SettingsWindowController(cm, on_config_saved=lambda: reloaded.append(True))
@@ -143,12 +154,13 @@ def test_config_and_settings_ipc() -> None:
             assert cm.data.get_api_key("anthropic") == "sk-ant-test-key"
             assert cm.data.get_api_key("openai") == "sk-openai-test-key"
             assert cm.data.get_api_key("kimi") == "sk-kimi-test-key"
+
+            cm.add_history("um hi", "Hi.", "Offline", 210)
+            assert len(ConfigManager(cfg_file).data.history) == 1
+            assert api.clear_history() is True
+            assert len(ConfigManager(cfg_file).data.history) == 0
         finally:
             ctrl.stop()
-
-        cm.add_history("um hi", "Hi.", "Local", 210)
-        cm2 = ConfigManager(cfg_file)
-        assert len(cm2.data.history) == 1
 
 
 def test_alt_x_hook_and_win_h_passthrough() -> None:
@@ -191,6 +203,7 @@ def test_alt_x_hook_and_win_h_passthrough() -> None:
 
 if __name__ == "__main__":
     test_win32_struct_sizes()
+    test_minimal_ui_has_no_overexplanation_or_examples()
     test_cleaner_disfluencies_and_commands()
     test_config_and_settings_ipc()
     test_alt_x_hook_and_win_h_passthrough()
