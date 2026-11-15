@@ -1,0 +1,17 @@
+name: Feature Request
+description: Suggest a new AI workflow, voice command, or integration for WinFlow
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Feature Description
+      description: What capability would make WinFlow better for your daily workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Example Usage
+      placeholder: e.g., Custom per-app tone profiles (casual in Slack, formal in Outlook)...

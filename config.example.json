@@ -1,0 +1,19 @@
+{
+  "engine_mode": "local",
+  "cloud_provider": "groq",
+  "groq_api_key": "",
+  "gemini_api_key": "",
+  "local_model_size": "base",
+  "local_device": "auto",
+  "language": "en",
+  "hotkey_mode": "hybrid",
+  "hold_threshold_ms": 350,
+  "remove_fillers": true,
+  "smart_formatting": true,
+  "style_mode": "clean",
+  "custom_dictionary": "Wispr Flow, WinFlow, GitHub, Windows",
+  "restore_clipboard": true,
+  "sound_cues": true,
+  "input_device": null,
+  "history": []
+}
