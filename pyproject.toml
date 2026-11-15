@@ -1,7 +1,7 @@
 [project]
 name = "winflow"
-version = "1.1.0"
-description = "Minimalist AI Voice Dictation for Windows 10/11 (Alt+X) with Groq Cloud Turbo, Offline Whisper, and Tactile Sound UI"
+version = "1.2.0"
+description = "Minimalist AI Voice Dictation for Windows 10/11 (Alt+X) with Hinglish ('Apna'), Multi-Model Cloud (Groq, Gemini, OpenAI, Claude, xAI Grok, NVIDIA, Kimi), Offline Whisper & Tactile Sound UI"
 requires-python = ">=3.11"
 dependencies = [
     "faster-whisper>=1.1.0",

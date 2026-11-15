@@ -191,7 +191,7 @@ def build_hero_banner() -> None:
     base.alpha_composite(logo, (72, 68))
     d.text((172, 92), "WinFlow", font=load_font(44, bold=True), fill=(246, 248, 255, 255), anchor="lm")
     d.rounded_rectangle((366, 76, 456, 108), radius=16, fill=(32, 48, 92, 240), outline=(92, 138, 255, 190), width=1)
-    d.text((411, 92), "v1.1.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
+    d.text((411, 92), "v1.2.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
 
     d.text(
         (76, 188),
@@ -395,11 +395,16 @@ def capture_settings_tabs() -> None:
         cm.update(
             engine_mode="cloud",
             cloud_provider="groq",
-            groq_api_key="gsk_demo_placeholder_key_for_screenshot_only",
-            gemini_api_key="",
+            api_keys={
+                "groq": "demo_groq_key_for_screenshot_display_only",
+                "gemini": "demo_gemini_key",
+                "anthropic": "demo_claude_key",
+                "xai": "demo_grok_key",
+                "nvidia": "demo_nvidia_key",
+            },
             local_model_size="base",
             local_device="cpu",
-            language="en",
+            language="hinglish",
             hotkey_mode="hybrid",
             remove_fillers=True,
             smart_formatting=True,
@@ -415,9 +420,9 @@ def capture_settings_tabs() -> None:
             1120,
         )
         cm.add_history(
-            "uh can can you push the release build to github new line thanks bro",
-            "Can you push the release build to GitHub?\nThanks bro.",
-            "Cloud (Groq)",
+            "अरे um भाई अपना काम जल्दी कर दो and push the release build to github",
+            "Bhai, apna kaam jaldi kar do and push the release build to GitHub.",
+            "Cloud (Groq) • Hinglish",
             742,
         )
         cm.add_history(
@@ -434,7 +439,7 @@ def capture_settings_tabs() -> None:
             html=MINIMALIST_HTML,
             js_api=api,
             width=580,
-            height=684,
+            height=710,
             background_color="#0A0B0E",
         )
 

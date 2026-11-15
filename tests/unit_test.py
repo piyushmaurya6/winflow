@@ -11,8 +11,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from winflow.cleaner import build_llm_cleanup_system_prompt, clean_text_locally, is_hallucination
-from winflow.config import ConfigManager
+from winflow.cleaner import (
+    build_llm_cleanup_system_prompt,
+    clean_text_locally,
+    contains_devanagari,
+    is_hallucination,
+    transliterate_devanagari_to_hinglish,
+)
+from winflow.config import SUPPORTED_PROVIDERS, ConfigManager
 from winflow.hotkey import (
     AltXHotkeyListener,
     INPUT,
@@ -64,6 +70,29 @@ def test_cleaner_disfluencies_and_commands() -> None:
     prompt = build_llm_cleanup_system_prompt(True, True, "clean", "Wispr Flow")
     assert "Wispr Flow" in prompt
 
+    # Verify Hinglish ("Apna") Romanization & Devanagari elimination
+    dev_input = "अरे um भाई अपना काम जल्दी कर लो new line मुझे समझ नहीं आया।"
+    hinglish_out = clean_text_locally(
+        dev_input,
+        remove_fillers=True,
+        smart_formatting=True,
+        style_mode="clean",
+        custom_dictionary="GitHub",
+        language="hinglish",
+    )
+    assert not contains_devanagari(hinglish_out), f"Devanagari leaked: {hinglish_out}"
+    assert "apna" in hinglish_out.lower(), f"Expected 'apna' in {hinglish_out!r}"
+    assert "bhai" in hinglish_out.lower(), f"Expected 'bhai' in {hinglish_out!r}"
+    assert "kaam" in hinglish_out.lower(), f"Expected 'kaam' in {hinglish_out!r}"
+    assert "samajh" in hinglish_out.lower(), f"Expected 'samajh' in {hinglish_out!r}"
+    assert "\n" in hinglish_out
+    assert transliterate_devanagari_to_hinglish("अपना") == "apna"
+
+    hinglish_prompt = build_llm_cleanup_system_prompt(
+        True, True, "clean", "WinFlow", language="hinglish"
+    )
+    assert "HINGLISH" in hinglish_prompt and "Apna" in hinglish_prompt
+
 
 def test_config_and_settings_ipc() -> None:
     for name in ("start", "stop", "cancel", "apply", "click"):
@@ -83,9 +112,20 @@ def test_config_and_settings_ipc() -> None:
             api = _SettingsJsApi(ConfigManager(cfg_file), initial_tab=0)
             st = api.get_state()
             assert st["ui_sounds"] is True
+            for p in ("groq", "gemini", "openai", "anthropic", "xai", "nvidia", "kimi", "custom"):
+                assert p in SUPPORTED_PROVIDERS
 
             st["style_mode"] = "polished"
             st["ui_sounds"] = False
+            st["language"] = "hinglish"
+            st["cloud_provider"] = "xai"
+            st["api_keys"] = {
+                "xai": "xai-test-key",
+                "nvidia": "nvapi-test-key",
+                "anthropic": "sk-ant-test-key",
+                "openai": "sk-openai-test-key",
+                "kimi": "sk-kimi-test-key",
+            }
             assert api.save_state(st) is True
 
             for _ in range(15):
@@ -96,6 +136,13 @@ def test_config_and_settings_ipc() -> None:
             assert len(reloaded) >= 1, "SettingsWindowController did not receive reload event!"
             assert cm.data.style_mode == "polished"
             assert cm.data.ui_sounds is False
+            assert cm.data.language == "hinglish"
+            assert cm.data.cloud_provider == "xai"
+            assert cm.data.get_api_key("xai") == "xai-test-key"
+            assert cm.data.get_api_key("nvidia") == "nvapi-test-key"
+            assert cm.data.get_api_key("anthropic") == "sk-ant-test-key"
+            assert cm.data.get_api_key("openai") == "sk-openai-test-key"
+            assert cm.data.get_api_key("kimi") == "sk-kimi-test-key"
         finally:
             ctrl.stop()
 

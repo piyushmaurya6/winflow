@@ -24,6 +24,7 @@ from .audio import list_input_devices
 from .config import (
     CONFIG_PATH,
     PROJECT_ROOT,
+    PROVIDER_SPECS,
     ConfigManager,
     is_startup_enabled,
     set_startup_enabled,
@@ -441,6 +442,67 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     box-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
 
+  /* ---- 8-Model Provider Grid ---- */
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .prov-chip {
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: transform 130ms var(--ease-out), border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+  }
+  .prov-chip:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.045);
+    border-color: var(--border-strong);
+  }
+  .prov-chip:active {
+    transform: scale(0.96);
+  }
+  .prov-chip.active {
+    background: rgba(91, 140, 255, 0.13);
+    border-color: rgba(91, 140, 255, 0.58);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .prov-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    display: none;
+    flex-shrink: 0;
+  }
+  .prov-chip.has-key .prov-dot {
+    display: inline-block;
+  }
+
+  .custom-endpoint-row {
+    display: none;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 7px;
+    margin-top: 8px;
+  }
+  .custom-endpoint-row.visible {
+    display: grid;
+  }
+
   /* ---- API Key Input + Inline Apply Button ---- */
   .key-row {
     display: flex;
@@ -692,19 +754,19 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
   <!-- Scrollable Main Area -->
   <main class="content">
-    <!-- TAB 0: ENGINE & API KEY -->
+    <!-- TAB 0: ENGINE, HINGLISH & MULTI-MODEL API KEYS -->
     <section class="pane active" id="pane-0">
       <div class="card">
         <div class="card-head">
-          <span class="card-label">Dictation Engine</span>
+          <span class="card-label">Dictation Engine & Language</span>
         </div>
         <div class="mode-grid">
           <button class="mode-card" id="cardCloud" onclick="selectEngineMode('cloud')">
             <div class="mode-title">
-              <span>Cloud Turbo</span>
+              <span>Cloud AI</span>
               <span style="font-size:11px;color:var(--blue)">~0.8s</span>
             </div>
-            <div class="mode-desc">Instant Whisper v3 Turbo + AI filler cleanup. Zero PC load.</div>
+            <div class="mode-desc">Instant Whisper + AI filler & Hinglish cleanup. Zero PC load.</div>
           </button>
           <button class="mode-card local-sel" id="cardLocal" onclick="selectEngineMode('local')">
             <div class="mode-title">
@@ -714,21 +776,60 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
             <div class="mode-desc">Runs faster-whisper locally on your PC. No API key needed.</div>
           </button>
         </div>
+
+        <div class="row" style="margin-top:10px;padding-top:9px;padding-bottom:0;border-top:1px solid rgba(255,255,255,0.055)">
+          <div>
+            <div class="row-title">Dictation Language</div>
+            <div class="row-sub" id="langSubHint">English-lock prevents foreign script hallucinations</div>
+          </div>
+          <div class="pill-group">
+            <button class="pill-opt" data-lang="en" onclick="setLanguage('en')">English</button>
+            <button class="pill-opt" data-lang="hinglish" onclick="setLanguage('hinglish')" title="Speak Hindi + English -> writes in English letters like 'Apna'">Hinglish</button>
+            <button class="pill-opt" data-lang="hi" onclick="setLanguage('hi')">Hindi</button>
+            <button class="pill-opt" data-lang="auto" onclick="setLanguage('auto')">Auto</button>
+          </div>
+        </div>
       </div>
 
       <div class="card">
-        <div class="card-head">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span class="card-label" style="margin:0">Cloud API Key</span>
-            <div class="pill-group">
-              <button class="pill-opt active" id="provGroq" onclick="selectProvider('groq')">Groq</button>
-              <button class="pill-opt" id="provGemini" onclick="selectProvider('gemini')">Gemini</button>
-            </div>
-          </div>
+        <div class="card-head" style="margin-bottom:8px">
+          <span class="card-label" style="margin:0">AI Model Provider & API Key</span>
           <button class="text-link" id="btnGetKey" onclick="openKeyPortal()">Get free Groq key ↗</button>
         </div>
 
-        <div class="key-row">
+        <div class="provider-grid">
+          <button class="prov-chip" data-prov="groq" onclick="selectProvider('groq')"><span class="prov-dot"></span><span>Groq</span></button>
+          <button class="prov-chip" data-prov="gemini" onclick="selectProvider('gemini')"><span class="prov-dot"></span><span>Gemini</span></button>
+          <button class="prov-chip" data-prov="openai" onclick="selectProvider('openai')"><span class="prov-dot"></span><span>OpenAI GPT</span></button>
+          <button class="prov-chip" data-prov="anthropic" onclick="selectProvider('anthropic')"><span class="prov-dot"></span><span>Claude</span></button>
+          <button class="prov-chip" data-prov="xai" onclick="selectProvider('xai')"><span class="prov-dot"></span><span>xAI Grok</span></button>
+          <button class="prov-chip" data-prov="nvidia" onclick="selectProvider('nvidia')"><span class="prov-dot"></span><span>NVIDIA</span></button>
+          <button class="prov-chip" data-prov="kimi" onclick="selectProvider('kimi')"><span class="prov-dot"></span><span>Kimi</span></button>
+          <button class="prov-chip" data-prov="custom" onclick="selectProvider('custom')"><span class="prov-dot"></span><span>Custom +</span></button>
+        </div>
+
+        <div class="custom-endpoint-row" id="customEndpointRow">
+          <div class="input-box" style="height:32px">
+            <input
+              type="text"
+              id="customBaseUrlInput"
+              placeholder="https://openrouter.ai/api/v1"
+              spellcheck="false"
+              oninput="state.custom_base_url = this.value.trim()"
+            />
+          </div>
+          <div class="input-box" style="height:32px">
+            <input
+              type="text"
+              id="customModelInput"
+              placeholder="Model (e.g. openai/gpt-4o-mini)"
+              spellcheck="false"
+              oninput="state.custom_model = this.value.trim()"
+            />
+          </div>
+        </div>
+
+        <div class="key-row" style="margin-top:8px">
           <div class="input-box">
             <input
               type="password"
@@ -746,34 +847,20 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
         </div>
 
         <div class="key-feedback" id="keyFeedback">
-          <span id="keyStatusMsg">Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 cleanup.</span>
+          <span id="keyStatusMsg">Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 (~0.8s).</span>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-head" style="margin-bottom:4px">
-          <span class="card-label">Offline Whisper Model</span>
-        </div>
-        <div class="row" style="padding-bottom:4px">
+        <div class="row" style="padding:0">
           <div>
-            <div class="row-title">Model Size</div>
-            <div class="row-sub">Unloaded from RAM automatically while Cloud Turbo is active</div>
+            <div class="row-title">Offline Whisper Model</div>
+            <div class="row-sub">Runs 100% locally in Offline mode (auto-unloaded from RAM in Cloud mode)</div>
           </div>
           <div class="pill-group">
             <button class="pill-opt" data-model="tiny" onclick="setLocalModel('tiny')">Tiny</button>
             <button class="pill-opt" data-model="base" onclick="setLocalModel('base')">Base</button>
             <button class="pill-opt" data-model="small" onclick="setLocalModel('small')">Small</button>
-          </div>
-        </div>
-        <div class="row" style="padding-bottom:0">
-          <div>
-            <div class="row-title">Spoken Language</div>
-            <div class="row-sub">English-lock prevents foreign script hallucinations</div>
-          </div>
-          <div class="pill-group">
-            <button class="pill-opt" data-lang="en" onclick="setLanguage('en')">English</button>
-            <button class="pill-opt" data-lang="auto" onclick="setLanguage('auto')">Auto</button>
-            <button class="pill-opt" data-lang="hi" onclick="setLanguage('hi')">Hindi</button>
           </div>
         </div>
       </div>
@@ -905,11 +992,71 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 <script>
   // ---- Precision Web Audio Micro-Acoustics ----
   let audioCtx = null;
+  const PROVIDERS = {
+    groq: {
+      badge: "Groq Turbo",
+      placeholder: "Paste gsk_... Groq API key",
+      portalLabel: "Get free Groq key ↗",
+      portalUrl: "https://console.groq.com/keys",
+      hint: "Free Groq key runs Whisper Large v3 Turbo + Qwen 3.8 (~0.8s)."
+    },
+    gemini: {
+      badge: "Gemini Flash",
+      placeholder: "Paste AIza... / AQ... Gemini API key",
+      portalLabel: "Get free Gemini key ↗",
+      portalUrl: "https://aistudio.google.com/apikey",
+      hint: "Google Gemini 3.5 Flash Lite single-pass audio & Hinglish cleanup."
+    },
+    openai: {
+      badge: "OpenAI GPT",
+      placeholder: "Paste sk-... OpenAI GPT API key",
+      portalLabel: "Get OpenAI key ↗",
+      portalUrl: "https://platform.openai.com/api-keys",
+      hint: "OpenAI GPT-4o Mini Transcribe + GPT-4o Mini cleanup."
+    },
+    anthropic: {
+      badge: "Anthropic Claude",
+      placeholder: "Paste sk-ant-... Claude API key",
+      portalLabel: "Get Claude key ↗",
+      portalUrl: "https://console.anthropic.com/settings/keys",
+      hint: "Anthropic Claude Haiku / Sonnet cleanup & Hinglish Romanizer."
+    },
+    xai: {
+      badge: "xAI Grok",
+      placeholder: "Paste xai-... Elon Musk's Grok API key",
+      portalLabel: "Get xAI Grok key ↗",
+      portalUrl: "https://console.x.ai/",
+      hint: "Elon Musk's xAI Grok fast cleanup & Hinglish Romanizer."
+    },
+    nvidia: {
+      badge: "NVIDIA NIM",
+      placeholder: "Paste nvapi-... NVIDIA NIM API key",
+      portalLabel: "Get free NVIDIA key ↗",
+      portalUrl: "https://build.nvidia.com/explore/discover",
+      hint: "NVIDIA Build NIM (Llama / Nemotron / Qwen) cleanup & Hinglish."
+    },
+    kimi: {
+      badge: "Moonshot Kimi",
+      placeholder: "Paste sk-... Moonshot Kimi API key",
+      portalLabel: "Get Kimi key ↗",
+      portalUrl: "https://platform.moonshot.ai/console/api-keys",
+      hint: "Moonshot AI Kimi K2 cleanup & Hinglish (.ai & .cn supported)."
+    },
+    custom: {
+      badge: "Custom API",
+      placeholder: "Paste sk-... OpenRouter / DeepSeek / Custom key",
+      portalLabel: "OpenRouter keys ↗",
+      portalUrl: "https://openrouter.ai/keys",
+      hint: "Any OpenAI-compatible API (OpenRouter, DeepSeek, Together, Ollama)."
+    }
+  };
+
   let state = {
     engine_mode: "local",
     cloud_provider: "groq",
-    groq_api_key: "",
-    gemini_api_key: "",
+    api_keys: {},
+    custom_base_url: "https://openrouter.ai/api/v1",
+    custom_model: "",
     local_model_size: "base",
     language: "en",
     hotkey_mode: "hybrid",
@@ -1027,30 +1174,47 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     }
   }
 
+  function getProviderKey(prov) {
+    const p = prov || state.cloud_provider;
+    return ((state.api_keys && state.api_keys[p]) || "").trim();
+  }
+
   function syncKeyInputFromProvider() {
+    const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
     const inp = document.getElementById("apiKeyInput");
     const btnLink = document.getElementById("btnGetKey");
-    if (state.cloud_provider === "gemini") {
-      inp.value = state.gemini_api_key || "";
-      inp.placeholder = "Paste AIza... Gemini key here";
-      btnLink.textContent = "Get free Gemini key ↗";
-    } else {
-      inp.value = state.groq_api_key || "";
-      inp.placeholder = "Paste gsk_... Groq key here";
-      btnLink.textContent = "Get free Groq key ↗";
-    }
+    inp.value = getProviderKey(state.cloud_provider);
+    inp.placeholder = spec.placeholder;
+    btnLink.textContent = spec.portalLabel;
+    document.getElementById("customBaseUrlInput").value = state.custom_base_url || "https://openrouter.ai/api/v1";
+    document.getElementById("customModelInput").value = state.custom_model || "";
   }
 
   function renderUI() {
+    const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
     // Header chip
     const dot = document.getElementById("headerDot");
     const txt = document.getElementById("headerModeText");
+    const langSuffix = state.language === "hinglish" ? " • Hinglish" : "";
     if (state.engine_mode === "cloud") {
       dot.className = "status-dot cloud";
-      txt.textContent = state.cloud_provider === "gemini" ? "Gemini Cloud" : "Groq Turbo";
+      txt.textContent = spec.badge + langSuffix;
     } else {
       dot.className = "status-dot";
-      txt.textContent = `Offline (${state.local_model_size})`;
+      txt.textContent = `Offline (${state.local_model_size})${langSuffix}`;
+    }
+
+    // Language subtitle helper
+    const langHints = {
+      en: "English-lock prevents foreign script hallucinations",
+      hinglish: 'Hindi spoken → English letters (e.g. "Bhai apna kaam kar lo")',
+      hi: "Outputs native Devanagari Hindi script (अपना काम कर लो)",
+      auto: "Automatically detects spoken language"
+    };
+    const langSub = document.getElementById("langSubHint");
+    if (langSub) {
+      langSub.textContent = langHints[state.language] || langHints.en;
+      langSub.style.color = state.language === "hinglish" ? "var(--blue)" : "var(--text-muted)";
     }
 
     // Sound toggle button
@@ -1062,9 +1226,15 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     document.getElementById("cardCloud").classList.toggle("selected", state.engine_mode === "cloud");
     document.getElementById("cardLocal").classList.toggle("selected", state.engine_mode === "local");
 
-    // Provider pills
-    document.getElementById("provGroq").classList.toggle("active", state.cloud_provider === "groq");
-    document.getElementById("provGemini").classList.toggle("active", state.cloud_provider === "gemini");
+    // 8-Provider grid chips + saved key emerald dot
+    document.querySelectorAll("[data-prov]").forEach(el => {
+      const p = el.dataset.prov;
+      el.classList.toggle("active", p === state.cloud_provider);
+      el.classList.toggle("has-key", !!getProviderKey(p));
+    });
+
+    // Custom endpoint fields visibility
+    document.getElementById("customEndpointRow").classList.toggle("visible", state.cloud_provider === "custom");
 
     // Pill groups
     document.querySelectorAll("[data-model]").forEach(el =>
@@ -1138,16 +1308,14 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
   function captureCurrentKeyInput() {
     const val = document.getElementById("apiKeyInput").value.trim();
-    if (state.cloud_provider === "gemini") {
-      state.gemini_api_key = val;
-    } else {
-      state.groq_api_key = val;
-    }
+    if (!state.api_keys) state.api_keys = {};
+    state.api_keys[state.cloud_provider] = val;
     return val;
   }
 
   function onKeyInputChanged() {
     const val = captureCurrentKeyInput();
+    renderUI();
     if (val) {
       setFeedback("Click Apply Key (or press Enter) to verify & activate.", "");
     }
@@ -1159,9 +1327,10 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     state.cloud_provider = prov;
     syncKeyInputFromProvider();
     renderUI();
-    const hasKey = prov === "gemini" ? !!state.gemini_api_key : !!state.groq_api_key;
+    const spec = PROVIDERS[prov] || PROVIDERS.groq;
+    const hasKey = !!getProviderKey(prov);
     setFeedback(
-      hasKey ? "API key saved. Click Apply Key to verify & activate." : `Paste your free ${prov === "gemini" ? "Gemini" : "Groq"} key and click Apply Key.`,
+      hasKey ? `✓ ${spec.badge} key saved — click Apply Key to switch & verify.` : spec.hint,
       hasKey ? "ok" : ""
     );
   }
@@ -1169,10 +1338,9 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   async function selectEngineMode(mode) {
     captureCurrentKeyInput();
     if (mode === "cloud") {
-      const hasKey = state.cloud_provider === "gemini" ? !!state.gemini_api_key : !!state.groq_api_key;
-      if (!hasKey) {
+      if (!getProviderKey(state.cloud_provider)) {
         uiTone("error");
-        setFeedback("Paste your free API key below and click Apply Key first.", "err");
+        setFeedback("Paste an API key below and click Apply Key first.", "err");
         document.getElementById("apiKeyInput").focus();
         return;
       }
@@ -1191,6 +1359,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       const inp = document.getElementById("apiKeyInput");
       inp.value = clip.trim();
       captureCurrentKeyInput();
+      renderUI();
       setFeedback("Key pasted — click Apply Key to activate.", "");
     }
   }
@@ -1210,14 +1379,14 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
   function openKeyPortal() {
     uiTone("press");
-    const url = state.cloud_provider === "gemini"
-      ? "https://aistudio.google.com/apikey"
-      : "https://console.groq.com/keys";
-    window.pywebview.api.open_url(url);
+    const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
+    window.pywebview.api.open_url(spec.portalUrl);
   }
 
   async function applyApiKey() {
     const keyVal = captureCurrentKeyInput();
+    state.custom_base_url = document.getElementById("customBaseUrlInput").value.trim() || "https://openrouter.ai/api/v1";
+    state.custom_model = document.getElementById("customModelInput").value.trim();
     if (!keyVal) {
       uiTone("error");
       setFeedback("Please paste an API key first.", "err");
@@ -1232,13 +1401,18 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     setFeedback("Verifying API key…", "");
 
     try {
-      const res = await window.pywebview.api.verify_and_apply_key(state.cloud_provider, keyVal);
+      const res = await window.pywebview.api.verify_and_apply_key(
+        state.cloud_provider,
+        keyVal,
+        state.custom_base_url,
+        state.custom_model
+      );
       if (res.ok) {
         state.engine_mode = "cloud";
         renderUI();
         uiTone("apply");
         btn.textContent = "Applied ✓";
-        setFeedback(res.message || "Connected! Cloud Turbo is now active on Alt + X.", "ok");
+        setFeedback(res.message || "Connected! Active on Alt + X.", "ok");
         setTimeout(() => { btn.textContent = "Apply Key"; btn.disabled = false; }, 1300);
       } else {
         uiTone("error");
@@ -1314,11 +1488,11 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   async function saveAllSettings(explicitClick = false) {
     captureCurrentKeyInput();
     state.custom_dictionary = document.getElementById("dictInput").value.trim();
+    state.custom_base_url = document.getElementById("customBaseUrlInput").value.trim() || "https://openrouter.ai/api/v1";
+    state.custom_model = document.getElementById("customModelInput").value.trim();
 
     if (explicitClick) {
-      // If user pasted a key and hit bottom "Apply & Save", automatically activate Cloud mode too!
-      const activeKey = state.cloud_provider === "gemini" ? state.gemini_api_key : state.groq_api_key;
-      if (activeKey && state.engine_mode === "local") {
+      if (getProviderKey(state.cloud_provider) && state.engine_mode === "local") {
         state.engine_mode = "cloud";
       }
     }
@@ -1340,14 +1514,17 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   window.addEventListener("pywebviewready", async () => {
     const initial = await window.pywebview.api.get_state();
     Object.assign(state, initial);
+    if (!state.api_keys) state.api_keys = {};
     syncKeyInputFromProvider();
     renderUI();
     if (initial.initial_tab) {
       switchTab(initial.initial_tab, true);
     }
-    const hasKey = state.cloud_provider === "gemini" ? !!state.gemini_api_key : !!state.groq_api_key;
-    if (hasKey && state.engine_mode === "cloud") {
-      setFeedback("✓ API key configured & active on Alt + X.", "ok");
+    const spec = PROVIDERS[state.cloud_provider] || PROVIDERS.groq;
+    if (getProviderKey(state.cloud_provider) && state.engine_mode === "cloud") {
+      setFeedback(`✓ ${spec.badge} API key active on Alt + X.`, "ok");
+    } else {
+      setFeedback(spec.hint, "");
     }
 
     // Load microphones asynchronously so slow Bluetooth audio drivers NEVER block UI startup
@@ -1380,8 +1557,9 @@ class _SettingsJsApi:
         return {
             "engine_mode": cfg.engine_mode,
             "cloud_provider": cfg.cloud_provider,
-            "groq_api_key": cfg.groq_api_key,
-            "gemini_api_key": cfg.gemini_api_key,
+            "api_keys": dict(cfg.api_keys),
+            "custom_base_url": cfg.custom_base_url,
+            "custom_model": cfg.custom_model,
             "local_model_size": cfg.local_model_size,
             "language": cfg.language,
             "hotkey_mode": cfg.hotkey_mode,
@@ -1413,15 +1591,22 @@ class _SettingsJsApi:
     def set_startup(self, enable: bool) -> bool:
         return set_startup_enabled(bool(enable))
 
-    def verify_and_apply_key(self, provider: str, api_key: str) -> dict[str, Any]:
+    def verify_and_apply_key(
+        self,
+        provider: str,
+        api_key: str,
+        custom_base_url: str = "",
+        custom_model: str = "",
+    ) -> dict[str, Any]:
         key = (api_key or "").strip()
         if not key:
             return {"ok": False, "message": "API key cannot be empty."}
 
-        # Lightweight non-blocking HTTP check (4.5s max)
-        verified_msg = "✓ Key verified & Cloud Turbo activated!"
+        badge = PROVIDER_SPECS.get(provider, {}).get("badge", provider.upper())
+        verified_msg = f"✓ {badge} verified & activated on Alt + X!"
+
         try:
-            with httpx.Client(timeout=4.5) as client:
+            with httpx.Client(timeout=4.5, follow_redirects=True) as client:
                 if provider == "gemini":
                     r = client.get(
                         "https://generativelanguage.googleapis.com/v1beta/models",
@@ -1429,25 +1614,49 @@ class _SettingsJsApi:
                     )
                     if r.status_code in (400, 401, 403):
                         return {"ok": False, "message": f"Gemini rejected this key ({r.status_code})."}
-                else:
+                elif provider == "anthropic":
                     r = client.get(
-                        "https://api.groq.com/openai/v1/models",
+                        "https://api.anthropic.com/v1/models",
+                        headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
+                    )
+                    if r.status_code in (401, 403):
+                        return {"ok": False, "message": "Anthropic rejected this Claude API key."}
+                elif provider == "kimi":
+                    r = client.get(
+                        "https://api.moonshot.ai/v1/models",
                         headers={"Authorization": f"Bearer {key}"},
                     )
                     if r.status_code in (401, 403):
-                        return {"ok": False, "message": "Groq rejected this API key — check for typos."}
+                        r2 = client.get(
+                            "https://api.moonshot.cn/v1/models",
+                            headers={"Authorization": f"Bearer {key}"},
+                        )
+                        if r2.status_code in (401, 403):
+                            return {"ok": False, "message": "Moonshot Kimi rejected this API key."}
+                else:
+                    endpoint_map = {
+                        "groq": "https://api.groq.com/openai/v1/models",
+                        "openai": "https://api.openai.com/v1/models",
+                        "xai": "https://api.x.ai/v1/models",
+                        "nvidia": "https://integrate.api.nvidia.com/v1/models",
+                        "custom": f"{(custom_base_url or 'https://openrouter.ai/api/v1').rstrip('/')}/models",
+                    }
+                    check_url = endpoint_map.get(provider, endpoint_map["groq"])
+                    r = client.get(check_url, headers={"Authorization": f"Bearer {key}"})
+                    if r.status_code in (401, 403):
+                        return {"ok": False, "message": f"{badge} rejected this API key — check for typos."}
         except httpx.RequestError:
-            # Offline right now: still save key so it works as soon as internet reconnects
-            verified_msg = "✓ Key saved & activated (offline right now)."
+            verified_msg = f"✓ {badge} key saved & activated (offline right now)."
 
         updates: dict[str, Any] = {
             "engine_mode": "cloud",
             "cloud_provider": provider,
+            "api_keys": {provider: key},
         }
-        if provider == "gemini":
-            updates["gemini_api_key"] = key
-        else:
-            updates["groq_api_key"] = key
+        if custom_base_url.strip():
+            updates["custom_base_url"] = custom_base_url.strip()
+        if custom_model is not None:
+            updates["custom_model"] = custom_model.strip()
 
         self.config_mgr.update(**updates)
         signal_named_event(RELOAD_EVENT_NAME)
@@ -1457,8 +1666,9 @@ class _SettingsJsApi:
         allowed = {
             "engine_mode",
             "cloud_provider",
-            "groq_api_key",
-            "gemini_api_key",
+            "api_keys",
+            "custom_base_url",
+            "custom_model",
             "local_model_size",
             "language",
             "hotkey_mode",
@@ -1529,7 +1739,7 @@ def run_standalone_settings_window(
         html=MINIMALIST_HTML,
         js_api=api,
         width=580,
-        height=684,
+        height=710,
         min_size=(480, 460),
         background_color="#0A0B0E",
     )

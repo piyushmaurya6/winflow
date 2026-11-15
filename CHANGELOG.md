@@ -5,6 +5,13 @@ All notable changes to **WinFlow** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-15
+
+### Added
+- **Hinglish Dictation Mode (`"Apna"` — Hindi in English Alphabet)**: Added first-class `Hinglish` language support across both Cloud AI and 100% Offline Local modes. Speak Hindi + English naturally and WinFlow writes strictly in Roman/English letters (e.g., `"Bhai, apna kaam jaldi kar do"`), backed by Whisper Hinglish prompting, LLM Romanization, and a deterministic Devanagari-to-Hinglish schwa-deleting transliterator in `winflow/cleaner.py`.
+- **Multi-Provider AI Key Vault (8+ Model Providers)**: Added native API key management, live HTTP key verification, and dynamic model discovery for **Groq**, **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Elon Musk's xAI (Grok)**, **NVIDIA NIM**, **Moonshot Kimi** (`.ai` & `.cn` auto-fallback), and **Custom OpenAI-Compatible** endpoints (**OpenRouter**, **DeepSeek**, **Together**, **Cerebras**, **Ollama**).
+- **System Tray Language & Provider Switchers**: Switch between `English`, `Hinglish ("Apna")`, `Hindi`, and `Auto` — or jump between any saved AI provider — directly from the Windows System Tray menu.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added

@@ -13,6 +13,8 @@ from .audio import AudioRecorder, play_cue
 from .config import (
     CONFIG_PATH,
     PROJECT_ROOT,
+    PROVIDER_SPECS,
+    SUPPORTED_PROVIDERS,
     ConfigManager,
     is_startup_enabled,
     set_startup_enabled,
@@ -225,15 +227,44 @@ class WinFlowApp:
     def _switch_engine_mode(self, mode: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         if mode == "cloud" and not self.config_mgr.has_active_cloud_key():
-            self.overlay.show_toast("Add free Groq/Gemini key first", is_error=True, duration_s=2.2)
+            self.overlay.show_toast("Paste API key in Settings first", is_error=True, duration_s=2.2)
             self.settings_ui.open_settings(tab_index=0)
             return
 
         self._paused = False
         self.config_mgr.update(engine_mode=mode)
         self._on_config_updated(from_ui=False)
-        badge = "Cloud API Mode" if mode == "cloud" else "Offline Local Mode"
+        prov_badge = PROVIDER_SPECS.get(self.config_mgr.data.cloud_provider, {}).get("badge", "Cloud AI")
+        badge = prov_badge if mode == "cloud" else "Offline Local Mode"
         self.overlay.show_toast(f"Switched: {badge}", duration_s=1.3)
+
+    def _switch_cloud_provider(self, prov: str) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
+        if not self.config_mgr.data.get_api_key(prov):
+            self.config_mgr.update(cloud_provider=prov)
+            lbl = PROVIDER_SPECS.get(prov, {}).get("label", prov.upper())
+            self.overlay.show_toast(f"Add {lbl} API key in Settings", is_error=True, duration_s=2.0)
+            self.settings_ui.open_settings(tab_index=0)
+            return
+        self._paused = False
+        self.config_mgr.update(engine_mode="cloud", cloud_provider=prov)
+        self._on_config_updated(from_ui=False)
+        badge = PROVIDER_SPECS.get(prov, {}).get("badge", prov.upper())
+        self.overlay.show_toast(f"Active: {badge}", duration_s=1.3)
+
+    def _set_language(self, lang: str) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
+        self.config_mgr.update(language=lang)
+        self._refresh_tray_icon(recording=False)
+        if self.tray:
+            self.tray.update_menu()
+        labels = {
+            "en": "English",
+            "hinglish": "Hinglish (Apna)",
+            "hi": "Hindi (Devanagari)",
+            "auto": "Auto-Detect",
+        }
+        self.overlay.show_toast(f"Language: {labels.get(lang, lang)}", duration_s=1.2)
 
     def _set_style_mode(self, style_mode: str) -> None:
         play_sound("click", enabled=self.config_mgr.data.ui_sounds)
@@ -265,37 +296,58 @@ class WinFlowApp:
 
     def _on_config_updated(self, from_ui: bool = False) -> None:
         cfg = self.config_mgr.data
-        if cfg.engine_mode == "cloud":
-            self.engine.unload_local_model()
-            self.engine.warm_cloud_connection_async(cfg)
-        else:
+        if self.engine.needs_local_stt(cfg):
             self.engine.preload_local_model_async(cfg)
+        else:
+            self.engine.unload_local_model()
+        if cfg.engine_mode == "cloud":
+            self.engine.warm_cloud_connection_async(cfg)
         self._refresh_tray_icon(recording=False)
         if self.tray:
             self.tray.update_menu()
         if from_ui and not self.hotkey.is_recording:
-            badge = "Cloud Turbo" if cfg.engine_mode == "cloud" else f"Offline ({cfg.local_model_size})"
-            self.overlay.show_toast(f"Applied • {badge}", duration_s=1.1)
+            badge = (
+                PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud AI")
+                if cfg.engine_mode == "cloud"
+                else f"Offline ({cfg.local_model_size})"
+            )
+            if cfg.language == "hinglish":
+                badge = f"{badge} • Hinglish"
+            self.overlay.show_toast(f"Applied • {badge}", duration_s=1.2)
 
     def _refresh_tray_icon(self, recording: bool = False) -> None:
         if not self.tray:
             return
-        mode = self.config_mgr.data.engine_mode
+        cfg = self.config_mgr.data
+        mode = cfg.engine_mode
         self.tray.icon = _create_tray_icon(mode=mode, recording=recording, paused=self._paused)
         if self._paused:
             self.tray.title = "WinFlow (PAUSED) — Alt+X disabled"
             return
         provider_desc = (
-            f"Cloud ({self.config_mgr.data.cloud_provider.upper()})"
+            PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", cfg.cloud_provider.upper())
             if mode == "cloud"
-            else f"Offline Local ({self.config_mgr.data.local_model_size})"
+            else f"Offline ({cfg.local_model_size})"
         )
-        self.tray.title = f"WinFlow — {provider_desc} | Press Alt+X to speak"
+        lang_tag = " • Hinglish" if cfg.language == "hinglish" else ""
+        self.tray.title = f"WinFlow — {provider_desc}{lang_tag} | Press Alt+X"
+
+    def _make_provider_item(self, prov: str) -> pystray.MenuItem:
+        label = PROVIDER_SPECS[prov]["label"]
+        return pystray.MenuItem(
+            label,
+            lambda icon, item: self._switch_cloud_provider(prov),
+            checked=lambda item: (
+                self.config_mgr.data.engine_mode == "cloud"
+                and self.config_mgr.data.cloud_provider == prov
+            ),
+            radio=True,
+        )
 
     def _build_menu(self) -> pystray.Menu:
         return pystray.Menu(
             pystray.MenuItem(
-                "WinFlow Settings & History… (Alt+X)",
+                "WinFlow Settings & API Keys… (Alt+X)",
                 lambda icon, item: self.settings_ui.open_settings(0),
                 default=True,
             ),
@@ -306,7 +358,7 @@ class WinFlowApp:
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
-                "Mode: Free Cloud API (Groq — Instant)",
+                "Mode: Cloud AI (Fastest)",
                 lambda icon, item: self._switch_engine_mode("cloud"),
                 checked=lambda item: self.config_mgr.data.engine_mode == "cloud",
                 radio=True,
@@ -316,6 +368,39 @@ class WinFlowApp:
                 lambda icon, item: self._switch_engine_mode("local"),
                 checked=lambda item: self.config_mgr.data.engine_mode == "local",
                 radio=True,
+            ),
+            pystray.MenuItem(
+                "Cloud AI Provider",
+                pystray.Menu(*(self._make_provider_item(p) for p in SUPPORTED_PROVIDERS)),
+            ),
+            pystray.MenuItem(
+                "Dictation Language (Hinglish / English)",
+                pystray.Menu(
+                    pystray.MenuItem(
+                        "English",
+                        lambda icon, item: self._set_language("en"),
+                        checked=lambda item: self.config_mgr.data.language == "en",
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        'Hinglish — Hindi in English letters ("Apna")',
+                        lambda icon, item: self._set_language("hinglish"),
+                        checked=lambda item: self.config_mgr.data.language == "hinglish",
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        "Hindi (Devanagari — अपना)",
+                        lambda icon, item: self._set_language("hi"),
+                        checked=lambda item: self.config_mgr.data.language == "hi",
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        "Auto-Detect",
+                        lambda icon, item: self._set_language("auto"),
+                        checked=lambda item: self.config_mgr.data.language == "auto",
+                        radio=True,
+                    ),
+                ),
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
@@ -375,12 +460,15 @@ class WinFlowApp:
         self.hotkey.start()
 
         cfg = self.config_mgr.data
+        if self.engine.needs_local_stt(cfg):
+            self.engine.preload_local_model_async(cfg)
         if cfg.engine_mode == "cloud":
             self.engine.warm_cloud_connection_async(cfg)
-            mode_badge = "Groq Cloud Turbo"
+            mode_badge = PROVIDER_SPECS.get(cfg.cloud_provider, {}).get("badge", "Cloud AI")
         else:
-            self.engine.preload_local_model_async(cfg)
             mode_badge = "Offline Local"
+        if cfg.language == "hinglish":
+            mode_badge = f"{mode_badge} • Hinglish"
 
         self.overlay.show_toast(f"WinFlow Ready • Alt+X ({mode_badge})", duration_s=1.6)
 

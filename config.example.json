@@ -3,6 +3,18 @@
   "cloud_provider": "groq",
   "groq_api_key": "",
   "gemini_api_key": "",
+  "api_keys": {
+    "groq": "",
+    "gemini": "",
+    "openai": "",
+    "anthropic": "",
+    "xai": "",
+    "nvidia": "",
+    "kimi": "",
+    "custom": ""
+  },
+  "custom_base_url": "https://openrouter.ai/api/v1",
+  "custom_model": "",
   "local_model_size": "base",
   "local_device": "auto",
   "language": "en",

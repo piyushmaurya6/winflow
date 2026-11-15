@@ -41,7 +41,8 @@ Tools like **Wispr Flow** (paid subscription) and **FreeFlow** (macOS-only) tran
 | **100% Free & Open Source (MIT)** | ✅ | ✅ | ❌ *(Paid)* | ✅ |
 | **Removes Fillers (`um`, `uh`) & Stutters (`can Can`)** | ❌ | ✅ | ✅ | ✅ |
 | **Custom Tech & Name Dictionary** | ❌ | ✅ | ✅ | ✅ |
-| **Sub-Second Cloud Mode (Free BYOK Groq / Gemini)** | ❌ | ✅ | ✅ | ✅ *(~800 ms)* |
+| **Sub-Second Cloud Mode (BYOK: Groq, Gemini, GPT, Claude, Grok, NVIDIA, Kimi)** | ❌ | ✅ | ✅ | ✅ *(8+ Providers)* |
+| **Native Hinglish Mode (`"Apna"` — Hindi in English letters)** | ❌ | ❌ | ⚠️ | ✅ *(Cloud + Offline)* |
 | **100% Offline Local Mode (`faster-whisper`)** | ❌ | ✅ | ❌ | ✅ |
 | **Keeps Native Windows `Win + H` Working Too** | — | — | ✅ | ✅ *(Uses `Alt + X`)* |
 
@@ -62,11 +63,11 @@ irm https://raw.githubusercontent.com/piyushmaurya6/winflow/main/scripts/install
 
 | Package | Platform | Direct Download Link |
 | :--- | :--- | :--- |
-| **`WinFlow-v1.1.0-Windows-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable Bundle (.zip)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.1.0/WinFlow-v1.1.0-Windows-x64.zip) |
-| **`WinFlow-QuickInstaller.bat`** | Windows 10 / 11 (64-bit) | [**⬇ Download 1-Click Installer (.bat)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.1.0/WinFlow-QuickInstaller.bat) |
-| **All Releases & Checksums** | GitHub Releases | [**View v1.1.0 Release Notes ↗**](https://github.com/piyushmaurya6/winflow/releases/tag/v1.1.0) |
+| **`WinFlow-v1.2.0-Windows-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable Bundle (.zip)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.2.0/WinFlow-v1.2.0-Windows-x64.zip) |
+| **`WinFlow-QuickInstaller.bat`** | Windows 10 / 11 (64-bit) | [**⬇ Download 1-Click Installer (.bat)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.2.0/WinFlow-QuickInstaller.bat) |
+| **All Releases & Checksums** | GitHub Releases | [**View v1.2.0 Release Notes ↗**](https://github.com/piyushmaurya6/winflow/releases/tag/v1.2.0) |
 
-1. Download and extract **`WinFlow-v1.1.0-Windows-x64.zip`**.
+1. Download and extract **`WinFlow-v1.2.0-Windows-x64.zip`**.
 2. Double-click **`Install-And-Run.bat`** once to finish setup and create your Desktop shortcut.
 3. Anytime afterward, launch silently via your **WinFlow** Desktop shortcut or **`Start-WinFlow.vbs`** (double-clicking again while running opens the minimalist Settings window).
 
@@ -84,7 +85,8 @@ wscript.exe Start-WinFlow.vbs
 
 ## ✨ Key Features
 
-- **⚡ Sub-Second Cloud Dictation (~800 ms)** — Powered by **Groq** (`whisper-large-v3-turbo` + `qwen/qwen3.8-27b`) or **Google Gemini** (`gemini-3.5-flash-lite`) using your own free API key, with persistent TLS connection pooling and automatic silence trimming.
+- **⚡ Multi-Model Cloud Vault (8+ Providers)** — Bring your own API key from **Groq**, **Google Gemini**, **OpenAI (GPT)**, **Anthropic (Claude)**, **Elon Musk's xAI (Grok)**, **NVIDIA NIM**, **Moonshot Kimi** (`.ai` & `.cn`), or **Custom OpenAI-Compatible** endpoints (**OpenRouter**, **DeepSeek**, **Together**, **Ollama**). Save keys for multiple providers simultaneously and switch in 1 click.
+- **🇮🇳 Built-In Hinglish Mode (`"Apna"` — Hindi in English Alphabet)** — Speak Hindi + English naturally and output 100% Romanized Latin letters (*"Bhai, apna kaam jaldi kar do and push to GitHub"*) — never unwanted Devanagari script — across **both** Cloud AI and 100% Offline Local modes.
 - **🔒 100% Private Offline Mode** — Switch to **Offline Local Whisper** (`faster-whisper` `int8` with Silero VAD) in 1 click from the system tray. Loads cached models with `local_files_only=True` (zero network requests) and automatically unloads from RAM when you switch back to Cloud mode.
 - **🎛️ Minimalist WebView2 Control Center + Tactile Acoustics** — Isolated STA-process Settings window with dark Windows 11 DWM chrome, inline **`Paste` / `Apply Key`** live verification, DPI-proof sticky **`Apply & Save`** footer, and synthesized micro-acoustic button feedback (toggleable via `Sound On / Muted`).
 - **🧠 Wispr-Style AI Disfluency Cleanup** — Strips vocal hesitations (*"um"*, *"uh"*, *"like"*, *"you know"*), collapses repeated stutters (*"can Can we"* → *"Can we"*), applies your **Custom Words** dictionary (*"whisper flow"* → *"Wispr Flow"*), and executes voice formatting commands (*"new line"*, *"new paragraph"*).
@@ -137,9 +139,11 @@ Right-click the **WinFlow icon** in the Windows System Tray (blue in Cloud mode,
 
 | Mode | Speech-to-Text | Cleanup Engine | Typical Latency (30w) | RAM Usage | API Key Needed? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cloud — Groq** *(Recommended)* | `whisper-large-v3-turbo` | `qwen/qwen3.8-27b` | **~700 – 900 ms** | ~35 MB | Free key from [console.groq.com](https://console.groq.com/keys) |
-| **Cloud — Google Gemini** | `gemini-3.5-flash-lite` *(Multimodal)* | Single-pass Gemini 3.5 | **~1.1 – 1.8 s** | ~35 MB | Free key from [aistudio.google.com](https://aistudio.google.com/apikey) |
-| **Offline Local** | `faster-whisper` (`tiny`/`base`/`small`) | Deterministic NLP Cleaner | **~1.1 – 1.6 s** *(CPU)* | ~260 MB | **None (100% Offline)** |
+| **Cloud — Groq** *(Recommended)* | `whisper-large-v3-turbo` | `qwen/qwen3.8-27b` | **~700 – 900 ms** | ~35 MB | Free key ([console.groq.com](https://console.groq.com/keys)) |
+| **Cloud — Google Gemini** | `gemini-3.5-flash-lite` *(Audio)* | Single-pass Gemini 3.5 | **~1.1 – 2.0 s** | ~35 MB | Free key ([aistudio.google.com](https://aistudio.google.com/apikey)) |
+| **Cloud — OpenAI (GPT)** | `gpt-4o-mini-transcribe` | `gpt-4o-mini` | **~950 – 1,500 ms** | ~35 MB | API key ([platform.openai.com](https://platform.openai.com/api-keys)) |
+| **Cloud — Claude / xAI Grok / NVIDIA / Kimi / Custom** | Hybrid Whisper *(Cloud or Local)* | Claude Haiku / Grok / NVIDIA NIM / Kimi K2 | **~900 – 1,800 ms** | ~35–260 MB | Respective provider API key |
+| **Offline Local** | `faster-whisper` (`tiny`/`base`/`small`) | Deterministic NLP + Hinglish Romanizer | **~1.1 – 1.6 s** *(CPU)* | ~260 MB | **None (100% Offline)** |
 
 ---
 

@@ -190,6 +190,31 @@ def test_2_groq_cloud_and_ui_and_vbs() -> None:
         assert res_gem.final_text and res_gem.latency_ms < 5000
     eng.close()
 
+    # Test Hinglish ("Apna") audio transcription + Romanization on Groq & Gemini!
+    with tempfile.TemporaryDirectory() as td:
+        h_samples, h_wav = synthesize_speech_wav(
+            "Um, bhai apna kaam jaldi karo and push the code to GitHub.",
+            Path(td) / "hinglish.wav",
+        )
+    eng_h = SpeechEngine()
+    groq_hinglish_cfg = replace(
+        cm.data, engine_mode="cloud", cloud_provider="groq", language="hinglish"
+    )
+    res_h = eng_h.process_audio(h_samples, h_wav, groq_hinglish_cfg)
+    print(f"  Groq Hinglish result ({res_h.latency_ms} ms): {res_h.final_text!r}")
+    assert "apna" in res_h.final_text.lower(), f"Expected 'apna' in Hinglish output: {res_h.final_text!r}"
+    from winflow.cleaner import contains_devanagari
+    assert not contains_devanagari(res_h.final_text), f"Devanagari leaked: {res_h.final_text!r}"
+
+    if cm.data.get_api_key("gemini"):
+        gem_hinglish_cfg = replace(
+            cm.data, engine_mode="cloud", cloud_provider="gemini", language="hinglish"
+        )
+        res_gh = eng_h.process_audio(h_samples, h_wav, gem_hinglish_cfg)
+        print(f"  Gemini Hinglish result ({res_gh.latency_ms} ms): {res_gh.final_text!r}")
+        assert "apna" in res_gh.final_text.lower()
+        assert not contains_devanagari(res_gh.final_text)
+    eng_h.close()
     assert set_clipboard_text("Alt+X Clipboard Check")
     assert get_clipboard_text() == "Alt+X Clipboard Check"
 
@@ -260,7 +285,12 @@ def test_2_groq_cloud_and_ui_and_vbs() -> None:
                 ui_results["feedback_cls"] = win.evaluate_js("document.getElementById('keyFeedback').className")
                 ui_results["feedback_msg"] = win.evaluate_js("document.getElementById('keyStatusMsg').textContent")
 
-                # 4. Switch tabs & test tactile sound synthesis
+                # 4. Test Hinglish pill, all 8 provider chips, Custom+ endpoint row, & tactile sound
+                win.evaluate_js("setLanguage('hinglish'); selectProvider('xai'); selectProvider('nvidia'); selectProvider('anthropic'); selectProvider('kimi'); selectProvider('custom');")
+                time.sleep(0.15)
+                ui_results["custom_visible"] = win.evaluate_js("document.getElementById('customEndpointRow').classList.contains('visible')")
+                ui_results["prov_count"] = win.evaluate_js("document.querySelectorAll('[data-prov]').length")
+                ui_results["lang_active"] = win.evaluate_js("document.querySelector('[data-lang=\"hinglish\"]').classList.contains('active')")
                 win.evaluate_js("switchTab(1); uiTone('press'); switchTab(2);")
                 time.sleep(0.2)
                 ui_results["active_pane"] = win.evaluate_js("document.getElementById('pane-2').classList.contains('active')")
@@ -277,6 +307,9 @@ def test_2_groq_cloud_and_ui_and_vbs() -> None:
         assert ui_results["pasted_len"] == len(cm.data.groq_api_key.strip())
         assert "ok" in ui_results["feedback_cls"], f"Apply Key failed: {ui_results}"
         assert ui_results["active_pane"] is True
+        assert ui_results["prov_count"] == 8
+        assert ui_results["custom_visible"] is True
+        assert ui_results["lang_active"] is True
         assert "cloud" in reload_hits, "Daemon did not receive live reload from Apply Key!"
 
     pill = FloatingPillOverlay(get_audio_level=lambda: 0.6)
