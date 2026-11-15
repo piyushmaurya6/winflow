@@ -311,10 +311,6 @@ class SpeechEngine:
                 + "\nIf the audio is silent or contains no intelligible words, return an empty string."
             )
 
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-2.5-flash:generateContent?key={cfg.gemini_api_key.strip()}"
-        )
         payload = {
             "contents": [
                 {
@@ -326,9 +322,21 @@ class SpeechEngine:
             ],
             "generationConfig": {"temperature": 0.1},
         }
-        resp = self._http.post(url, json=payload, timeout=10.0)
-        if resp.status_code != 200:
-            raise RuntimeError(f"Gemini error ({resp.status_code})")
+        headers = {"x-goog-api-key": cfg.gemini_api_key.strip()}
+        last_status = 0
+        resp = None
+        for model_id in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash"):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent"
+            r = self._http.post(url, headers=headers, json=payload, timeout=10.0)
+            last_status = r.status_code
+            if r.status_code == 200:
+                resp = r
+                break
+            if r.status_code in (401, 403):
+                raise RuntimeError("Invalid Gemini API key — check Settings")
+
+        if resp is None:
+            raise RuntimeError(f"Gemini error ({last_status})")
 
         body = resp.json()
         candidates = body.get("candidates") or []

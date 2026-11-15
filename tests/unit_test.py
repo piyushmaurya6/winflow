@@ -27,6 +27,8 @@ from winflow.hotkey import (
     WM_SYSKEYDOWN,
     WM_SYSKEYUP,
 )
+from winflow.settings_ui import SettingsWindowController, _SettingsJsApi
+from winflow.sounds import _build_cue_wav, play_sound
 
 VK_H = 0x48
 
@@ -63,13 +65,42 @@ def test_cleaner_disfluencies_and_commands() -> None:
     assert "Wispr Flow" in prompt
 
 
-def test_config_roundtrip() -> None:
+def test_config_and_settings_ipc() -> None:
+    for name in ("start", "stop", "cancel", "apply", "click"):
+        wav = _build_cue_wav(name)
+        assert wav[:4] == b"RIFF" and wav[8:12] == b"WAVE", f"Bad WAV for {name}"
+    play_sound("click", enabled=False)
+
     with tempfile.TemporaryDirectory() as td:
-        cm = ConfigManager(Path(td) / "cfg.json")
-        cm.update(engine_mode="local", style_mode="polished")
+        cfg_file = Path(td) / "cfg.json"
+        cm = ConfigManager(cfg_file)
+        assert cm.data.ui_sounds is True
+
+        reloaded = []
+        ctrl = SettingsWindowController(cm, on_config_saved=lambda: reloaded.append(True))
+        ctrl.start()
+        try:
+            api = _SettingsJsApi(ConfigManager(cfg_file), initial_tab=0)
+            st = api.get_state()
+            assert st["ui_sounds"] is True
+
+            st["style_mode"] = "polished"
+            st["ui_sounds"] = False
+            assert api.save_state(st) is True
+
+            for _ in range(15):
+                if reloaded:
+                    break
+                time.sleep(0.05)
+
+            assert len(reloaded) >= 1, "SettingsWindowController did not receive reload event!"
+            assert cm.data.style_mode == "polished"
+            assert cm.data.ui_sounds is False
+        finally:
+            ctrl.stop()
+
         cm.add_history("um hi", "Hi.", "Local", 210)
-        cm2 = ConfigManager(Path(td) / "cfg.json")
-        assert cm2.data.style_mode == "polished"
+        cm2 = ConfigManager(cfg_file)
         assert len(cm2.data.history) == 1
 
 
@@ -114,6 +145,6 @@ def test_alt_x_hook_and_win_h_passthrough() -> None:
 if __name__ == "__main__":
     test_win32_struct_sizes()
     test_cleaner_disfluencies_and_commands()
-    test_config_roundtrip()
+    test_config_and_settings_ipc()
     test_alt_x_hook_and_win_h_passthrough()
     print("All CI unit tests passed!")

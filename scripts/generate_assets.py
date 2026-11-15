@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import ctypes
+import ctypes.wintypes as wt
 import sys
 import tempfile
 import time
-import tkinter as tk
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageGrab
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from winflow.config import ConfigManager
-from winflow.settings_ui import SettingsWindowController
+from winflow.settings_ui import MINIMALIST_HTML, _apply_dark_dwm_and_icon, _SettingsJsApi
 
 ASSETS_DIR = PROJECT_ROOT / "assets"
 DOCS_IMG_DIR = PROJECT_ROOT / "docs" / "images"
@@ -190,7 +191,7 @@ def build_hero_banner() -> None:
     base.alpha_composite(logo, (72, 68))
     d.text((172, 92), "WinFlow", font=load_font(44, bold=True), fill=(246, 248, 255, 255), anchor="lm")
     d.rounded_rectangle((366, 76, 456, 108), radius=16, fill=(32, 48, 92, 240), outline=(92, 138, 255, 190), width=1)
-    d.text((411, 92), "v1.0.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
+    d.text((411, 92), "v1.1.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
 
     d.text(
         (76, 188),
@@ -337,8 +338,57 @@ def build_floating_pills_showcase() -> None:
     canvas.convert("RGB").save(DOCS_IMG_DIR / "floating-pills-showcase.png", quality=95)
 
 
+def _capture_hwnd_rgb(hwnd: int) -> Image.Image:
+    rect = wt.RECT()
+    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    ww = rect.right - rect.left
+    wh = rect.bottom - rect.top
+
+    hdc_win = ctypes.windll.user32.GetWindowDC(hwnd)
+    hdc_mem = ctypes.windll.gdi32.CreateCompatibleDC(hdc_win)
+    hbmp = ctypes.windll.gdi32.CreateCompatibleBitmap(hdc_win, ww, wh)
+    old = ctypes.windll.gdi32.SelectObject(hdc_mem, hbmp)
+    # PW_RENDERFULLCONTENT = 2 captures DirectComposition / WebView2 surfaces cleanly
+    ctypes.windll.user32.PrintWindow(hwnd, hdc_mem, 2)
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [
+            ("biSize", wt.DWORD),
+            ("biWidth", wt.LONG),
+            ("biHeight", wt.LONG),
+            ("biPlanes", wt.WORD),
+            ("biBitCount", wt.WORD),
+            ("biCompression", wt.DWORD),
+            ("biSizeImage", wt.DWORD),
+            ("biXPelsPerMeter", wt.LONG),
+            ("biYPelsPerMeter", wt.LONG),
+            ("biClrUsed", wt.DWORD),
+            ("biClrImportant", wt.DWORD),
+        ]
+
+    bmi = BITMAPINFOHEADER()
+    bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    bmi.biWidth = ww
+    bmi.biHeight = -wh
+    bmi.biPlanes = 1
+    bmi.biBitCount = 32
+    bmi.biCompression = 0
+
+    buf = ctypes.create_string_buffer(ww * wh * 4)
+    ctypes.windll.gdi32.GetDIBits(hdc_mem, hbmp, 0, wh, buf, ctypes.byref(bmi), 0)
+
+    ctypes.windll.gdi32.SelectObject(hdc_mem, old)
+    ctypes.windll.gdi32.DeleteObject(hbmp)
+    ctypes.windll.gdi32.DeleteDC(hdc_mem)
+    ctypes.windll.user32.ReleaseDC(hwnd, hdc_win)
+
+    return Image.frombuffer("RGBA", (ww, wh), buf, "raw", "BGRA", 0, 1).convert("RGB")
+
+
 def capture_settings_tabs() -> None:
-    """Open the real SettingsWindowController with clean demo data and capture all 3 tabs."""
+    """Open the real minimalist WebView2 Settings window with demo data and capture all 3 tabs."""
+    import webview
+
     with tempfile.TemporaryDirectory() as td:
         cfg_path = Path(td) / "demo_config.json"
         cm = ConfigManager(cfg_path)
@@ -354,6 +404,8 @@ def capture_settings_tabs() -> None:
             remove_fillers=True,
             smart_formatting=True,
             style_mode="clean",
+            ui_sounds=True,
+            sound_cues=True,
             custom_dictionary="Wispr Flow, WinFlow, GitHub, TypeScript, Kubernetes",
         )
         cm.add_history(
@@ -375,81 +427,41 @@ def capture_settings_tabs() -> None:
             807,
         )
 
-        ui = SettingsWindowController(cm, on_config_saved=lambda: None)
-        ui.start()
-        time.sleep(0.35)
+        win_title = "WinFlow"
+        api = _SettingsJsApi(cm, initial_tab=0)
+        window = webview.create_window(
+            win_title,
+            html=MINIMALIST_HTML,
+            js_api=api,
+            width=580,
+            height=684,
+            background_color="#0A0B0E",
+        )
 
         tab_files = [
             (0, "settings-engine.png"),
             (1, "settings-cleanup.png"),
             (2, "settings-history.png"),
         ]
-        captured_imgs: list[Image.Image] = []
 
-        for idx, fname in tab_files:
-            ui.open_settings(idx)
-            time.sleep(0.5)
-            win = ui._win
-            assert win is not None
-            win.update_idletasks()
-            win.update()
-            time.sleep(0.25)
+        def _capture_worker() -> None:
+            try:
+                _apply_dark_dwm_and_icon(win_title)
+                time.sleep(0.95)
+                hwnd = ctypes.windll.user32.FindWindowW(None, win_title)
+                assert hwnd, "Could not find WebView2 HWND!"
 
-            import ctypes
-            import ctypes.wintypes as wt
+                for idx, fname in tab_files:
+                    window.evaluate_js(f"switchTab({idx}, true);")
+                    time.sleep(0.45)
+                    shot = _capture_hwnd_rgb(hwnd)
+                    framed = Image.new("RGB", (shot.width + 56, shot.height + 56), (11, 13, 18))
+                    framed.paste(shot, (28, 28))
+                    framed.save(DOCS_IMG_DIR / fname, quality=95)
+            finally:
+                window.destroy()
 
-            hwnd = ctypes.windll.user32.GetParent(win.winfo_id()) or win.winfo_id()
-            rect = wt.RECT()
-            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            ww = rect.right - rect.left
-            wh = rect.bottom - rect.top
-
-            hdc_win = ctypes.windll.user32.GetWindowDC(hwnd)
-            hdc_mem = ctypes.windll.gdi32.CreateCompatibleDC(hdc_win)
-            hbmp = ctypes.windll.gdi32.CreateCompatibleBitmap(hdc_win, ww, wh)
-            old = ctypes.windll.gdi32.SelectObject(hdc_mem, hbmp)
-            # PW_RENDERFULLCONTENT = 2 works even on offscreen/background desktops
-            ctypes.windll.user32.PrintWindow(hwnd, hdc_mem, 2)
-
-            class BITMAPINFOHEADER(ctypes.Structure):
-                _fields_ = [
-                    ("biSize", wt.DWORD),
-                    ("biWidth", wt.LONG),
-                    ("biHeight", wt.LONG),
-                    ("biPlanes", wt.WORD),
-                    ("biBitCount", wt.WORD),
-                    ("biCompression", wt.DWORD),
-                    ("biSizeImage", wt.DWORD),
-                    ("biXPelsPerMeter", wt.LONG),
-                    ("biYPelsPerMeter", wt.LONG),
-                    ("biClrUsed", wt.DWORD),
-                    ("biClrImportant", wt.DWORD),
-                ]
-
-            bmi = BITMAPINFOHEADER()
-            bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-            bmi.biWidth = ww
-            bmi.biHeight = -wh
-            bmi.biPlanes = 1
-            bmi.biBitCount = 32
-            bmi.biCompression = 0
-
-            buf = ctypes.create_string_buffer(ww * wh * 4)
-            ctypes.windll.gdi32.GetDIBits(hdc_mem, hbmp, 0, wh, buf, ctypes.byref(bmi), 0)
-
-            ctypes.windll.gdi32.SelectObject(hdc_mem, old)
-            ctypes.windll.gdi32.DeleteObject(hbmp)
-            ctypes.windll.gdi32.DeleteDC(hdc_mem)
-            ctypes.windll.user32.ReleaseDC(hwnd, hdc_win)
-
-            shot = Image.frombuffer("RGBA", (ww, wh), buf, "raw", "BGRA", 0, 1).convert("RGB")
-            framed = Image.new("RGB", (shot.width + 64, shot.height + 64), (12, 14, 22))
-            framed.paste(shot, (32, 32))
-            framed.save(DOCS_IMG_DIR / fname, quality=95)
-            captured_imgs.append(shot)
-
-        ui.stop()
-        time.sleep(0.2)
+        webview.start(_capture_worker, gui="edgechromium")
 
 
 if __name__ == "__main__":

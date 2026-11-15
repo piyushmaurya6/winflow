@@ -16,7 +16,7 @@ if ($LocalCheck -and (Test-Path (Join-Path $LocalCheck "pyproject.toml"))) {
 } else {
     $InstallDir = Join-Path $HOME "WinFlow"
     Write-Host "[1/4] Downloading latest WinFlow release to $InstallDir ..." -ForegroundColor Gray
-    $ZipUrl = "https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-v1.0.0-Windows-x64.zip"
+    $ZipUrl = "https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Windows-x64.zip"
     $TmpZip = Join-Path $env:TEMP "winflow_release.zip"
     try {
         Invoke-WebRequest -Uri $ZipUrl -OutFile $TmpZip -UseBasicParsing

@@ -14,6 +14,7 @@
   "custom_dictionary": "Wispr Flow, WinFlow, GitHub, Windows",
   "restore_clipboard": true,
   "sound_cues": true,
+  "ui_sounds": true,
   "input_device": null,
   "history": []
 }

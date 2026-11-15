@@ -47,6 +47,7 @@ class AppConfig:
     # Output & UX
     restore_clipboard: bool = True
     sound_cues: bool = True
+    ui_sounds: bool = True
     input_device: int | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
 

@@ -130,27 +130,9 @@ class AudioRecorder:
             self._stream = None
 
 
+from .sounds import play_sound
+
+
 def play_cue(kind: str, enabled: bool = True) -> None:
-    """Play a gentle, non-blocking soft sine tone for start/stop/cancel cues."""
-    if not enabled:
-        return
-
-    def _worker() -> None:
-        try:
-            sr = 24000
-            if kind == "start":
-                t = np.linspace(0, 0.075, int(sr * 0.075), endpoint=False)
-                tone = 0.09 * np.sin(2 * np.pi * 587.33 * t) + 0.07 * np.sin(2 * np.pi * 880.0 * t)
-            elif kind == "stop":
-                t = np.linspace(0, 0.07, int(sr * 0.07), endpoint=False)
-                tone = 0.08 * np.sin(2 * np.pi * 740.0 * t)
-            else:
-                t = np.linspace(0, 0.08, int(sr * 0.08), endpoint=False)
-                tone = 0.07 * np.sin(2 * np.pi * 330.0 * t)
-
-            env = np.hanning(len(tone))
-            sd.play((tone * env).astype(np.float32), samplerate=sr, blocking=False)
-        except Exception:
-            pass
-
-    threading.Thread(target=_worker, daemon=True).start()
+    """Play a gentle, non-blocking native WinMM tone without touching PortAudio."""
+    play_sound(kind, enabled=enabled)

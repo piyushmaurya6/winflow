@@ -5,6 +5,19 @@ All notable changes to **WinFlow** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-15
+
+### Added
+- **Minimalist Edge WebView2 Control Center (`winflow/settings_ui.py`)**: Replaced the legacy Tkinter settings window with a hardware-accelerated minimalist UI running in its own isolated STA process — eliminating Win32 OLE clipboard freezes when pasting API keys (`Ctrl+V` / `Paste`) and preventing bottom-bar clipping across all Windows high-DPI scaling levels (`100%–200%`).
+- **Inline `Apply Key` + Live Verification**: Added an inline **`Paste`**, **`Show/Hide`**, and **`Apply Key`** button directly beside the API key input that verifies Groq/Gemini keys asynchronously and signals the background `Alt + X` daemon immediately via Win32 Named Events (`Local\WinFlowReloadConfigEvent`).
+- **Tactile Button Acoustics (`winflow/sounds.py` + Web Audio)**: Every button, segmented tab, pill, and toggle switch now produces crisp, synthesized tactile micro-sounds (`press`, `tab`, `toggleOn`, `toggleOff`, `apply`, `error`) with a one-click **`Sound On / Muted`** header toggle, while background dictation cues run via native `winmm.dll` (`winsound`) with zero PortAudio contention.
+- **First-Run & Re-Launch Polish**: Automatically opens Settings on first install and focuses Settings whenever the user re-launches the Desktop shortcut while WinFlow is already running in the system tray.
+
+### Fixed
+- Fixed Settings window freeze when pasting API keys or enumerating slow Bluetooth/WDM-KS microphones.
+- Fixed missing/clipped bottom Save button on `125%–175%` DPI laptop screens via a flexbox sticky **`Apply & Save`** footer.
+- Updated Google Gemini Cloud engine to `gemini-3.5-flash-lite` (with automatic fallback) for 2026 API keys where `gemini-2.5-flash` was retired (`404`).
+
 ## [1.0.0] - 2026-11-15
 
 ### Added

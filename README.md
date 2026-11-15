@@ -11,7 +11,7 @@ Speak naturally anywhere with **`Alt + X`** — strip filler words & stutters au
 
 <p>
   <a href="https://github.com/piyushmaurya6/winflow/releases/latest"><img src="https://img.shields.io/github/v/release/piyushmaurya6/winflow?style=for-the-badge&label=Release&color=4F7CFF" alt="Latest Release" /></a>
-  <a href="https://github.com/piyushmaurya6/winflow/releases/download/v1.0.0/WinFlow-v1.0.0-Windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows_x64_ZIP-22C584?style=for-the-badge&logo=windows" alt="Download Windows x64 ZIP" /></a>
+  <a href="https://github.com/piyushmaurya6/winflow/releases/latest/download/WinFlow-Windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows_x64_ZIP-22C584?style=for-the-badge&logo=windows" alt="Download Windows x64 ZIP" /></a>
   <a href="https://github.com/piyushmaurya6/winflow/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/piyushmaurya6/winflow/ci.yml?branch=main&style=for-the-badge&label=Windows%20CI" alt="Windows CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-F59E0B?style=for-the-badge" alt="MIT License" /></a>
 </p>
@@ -62,13 +62,13 @@ irm https://raw.githubusercontent.com/piyushmaurya6/winflow/main/scripts/install
 
 | Package | Platform | Direct Download Link |
 | :--- | :--- | :--- |
-| **`WinFlow-v1.0.0-Windows-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable Bundle (.zip)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.0.0/WinFlow-v1.0.0-Windows-x64.zip) |
-| **`WinFlow-QuickInstaller.bat`** | Windows 10 / 11 (64-bit) | [**⬇ Download 1-Click Installer (.bat)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.0.0/WinFlow-QuickInstaller.bat) |
-| **All Releases & Checksums** | GitHub Releases | [**View v1.0.0 Release Notes ↗**](https://github.com/piyushmaurya6/winflow/releases/tag/v1.0.0) |
+| **`WinFlow-v1.1.0-Windows-x64.zip`** | Windows 10 / 11 (64-bit) | [**⬇ Download Portable Bundle (.zip)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.1.0/WinFlow-v1.1.0-Windows-x64.zip) |
+| **`WinFlow-QuickInstaller.bat`** | Windows 10 / 11 (64-bit) | [**⬇ Download 1-Click Installer (.bat)**](https://github.com/piyushmaurya6/winflow/releases/download/v1.1.0/WinFlow-QuickInstaller.bat) |
+| **All Releases & Checksums** | GitHub Releases | [**View v1.1.0 Release Notes ↗**](https://github.com/piyushmaurya6/winflow/releases/tag/v1.1.0) |
 
-1. Download and extract **`WinFlow-v1.0.0-Windows-x64.zip`**.
+1. Download and extract **`WinFlow-v1.1.0-Windows-x64.zip`**.
 2. Double-click **`Install-And-Run.bat`** once to finish setup and create your Desktop shortcut.
-3. Anytime afterward, launch silently via your **WinFlow** Desktop shortcut or **`Start-WinFlow.vbs`** (or enable **Launch at Windows Startup** in the tray menu).
+3. Anytime afterward, launch silently via your **WinFlow** Desktop shortcut or **`Start-WinFlow.vbs`** (double-clicking again while running opens the minimalist Settings window).
 
 ### Option 3 — From Source (Developers)
 
@@ -84,8 +84,9 @@ wscript.exe Start-WinFlow.vbs
 
 ## ✨ Key Features
 
-- **⚡ Sub-Second Cloud Dictation (~800 ms)** — Powered by **Groq** (`whisper-large-v3-turbo` + `qwen/qwen3.8-27b`) or **Google Gemini** (`gemini-2.5-flash`) using your own free API key, with persistent TLS connection pooling and automatic silence trimming.
+- **⚡ Sub-Second Cloud Dictation (~800 ms)** — Powered by **Groq** (`whisper-large-v3-turbo` + `qwen/qwen3.8-27b`) or **Google Gemini** (`gemini-3.5-flash-lite`) using your own free API key, with persistent TLS connection pooling and automatic silence trimming.
 - **🔒 100% Private Offline Mode** — Switch to **Offline Local Whisper** (`faster-whisper` `int8` with Silero VAD) in 1 click from the system tray. Loads cached models with `local_files_only=True` (zero network requests) and automatically unloads from RAM when you switch back to Cloud mode.
+- **🎛️ Minimalist WebView2 Control Center + Tactile Acoustics** — Isolated STA-process Settings window with dark Windows 11 DWM chrome, inline **`Paste` / `Apply Key`** live verification, DPI-proof sticky **`Apply & Save`** footer, and synthesized micro-acoustic button feedback (toggleable via `Sound On / Muted`).
 - **🧠 Wispr-Style AI Disfluency Cleanup** — Strips vocal hesitations (*"um"*, *"uh"*, *"like"*, *"you know"*), collapses repeated stutters (*"can Can we"* → *"Can we"*), applies your **Custom Words** dictionary (*"whisper flow"* → *"Wispr Flow"*), and executes voice formatting commands (*"new line"*, *"new paragraph"*).
 - **🎹 Smart Hybrid `Alt + X` Hook (`WH_KEYBOARD_LL`)** — Tap `Alt + X` quickly to latch hands-free toggle mode, or hold `Alt + X` for push-to-talk. Suppresses the Windows `Alt` menu-bar highlight (`vkE8` mask) while leaving native **`Win + H`** completely untouched.
 - **🪶 Zero-Focus-Steal ARGB Pill Overlay** — Rendered directly via Win32 `UpdateLayeredWindow` (`WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT`) with 2x supersampled anti-aliasing and live WASAPI microphone waveform metering.
@@ -98,7 +99,7 @@ wscript.exe Start-WinFlow.vbs
 ### Floating Waveform Pill States
 <img src="docs/images/floating-pills-showcase.png" alt="WinFlow Floating Pill States" width="100%" />
 
-### Dark Windows 11 Settings & Dictation History
+### Minimalist Windows 11 Control Center & Dictation History
 <table>
   <tr>
     <td width="50%">
@@ -137,7 +138,7 @@ Right-click the **WinFlow icon** in the Windows System Tray (blue in Cloud mode,
 | Mode | Speech-to-Text | Cleanup Engine | Typical Latency (30w) | RAM Usage | API Key Needed? |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Cloud — Groq** *(Recommended)* | `whisper-large-v3-turbo` | `qwen/qwen3.8-27b` | **~700 – 900 ms** | ~35 MB | Free key from [console.groq.com](https://console.groq.com/keys) |
-| **Cloud — Google Gemini** | `gemini-2.5-flash` *(Multimodal)* | Single-pass Gemini 2.5 | **~950 – 1,300 ms** | ~35 MB | Free key from [aistudio.google.com](https://aistudio.google.com/apikey) |
+| **Cloud — Google Gemini** | `gemini-3.5-flash-lite` *(Multimodal)* | Single-pass Gemini 3.5 | **~1.1 – 1.8 s** | ~35 MB | Free key from [aistudio.google.com](https://aistudio.google.com/apikey) |
 | **Offline Local** | `faster-whisper` (`tiny`/`base`/`small`) | Deterministic NLP Cleaner | **~1.1 – 1.6 s** *(CPU)* | ~260 MB | **None (100% Offline)** |
 
 ---
@@ -171,14 +172,15 @@ winflow/
 │   └── self_test.py            # Full end-to-end audio/STT/UI integration suite
 ├── winflow/
 │   ├── app.py                  # Tray controller, watchdog & lifecycle orchestrator
-│   ├── audio.py                # 16 kHz WASAPI capture, silence trim & soft cues
+│   ├── audio.py                # 16 kHz WASAPI capture & silence trimming
 │   ├── cleaner.py              # Disfluency/stutter stripper & LLM prompt builder
 │   ├── config.py               # Thread-safe config & HKCU Startup registry helper
 │   ├── engine.py               # Groq, Gemini & faster-whisper unified speech engine
 │   ├── hotkey.py               # Native Win32 WH_KEYBOARD_LL Alt+X hook
 │   ├── injector.py             # Modifier-aware SendInput paste & clipboard restore
 │   ├── overlay.py              # Per-pixel ARGB UpdateLayeredWindow floating pill
-│   └── settings_ui.py          # Dark Windows 11 multi-tab Settings & History UI
+│   ├── settings_ui.py          # Minimalist Edge WebView2 Control Center & IPC
+│   └── sounds.py               # Native WinMM (winsound) & tactile UI acoustics
 ├── config.example.json         # Example configuration template
 ├── Install-And-Run.bat         # One-click local setup & launcher
 ├── Start-WinFlow.vbs           # Silent windowless background launcher

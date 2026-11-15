@@ -3,18 +3,26 @@ from __future__ import annotations
 import concurrent.futures
 import ctypes
 import logging
+import os
 import threading
 
 import pystray
 from PIL import Image, ImageDraw
 
 from .audio import AudioRecorder, play_cue
-from .config import PROJECT_ROOT, ConfigManager, is_startup_enabled, set_startup_enabled
+from .config import (
+    CONFIG_PATH,
+    PROJECT_ROOT,
+    ConfigManager,
+    is_startup_enabled,
+    set_startup_enabled,
+)
 from .engine import SpeechEngine
 from .hotkey import AltXHotkeyListener
 from .injector import paste_text_at_cursor, set_clipboard_text
 from .overlay import FloatingPillOverlay
 from .settings_ui import SettingsWindowController
+from .sounds import play_sound
 
 logging.basicConfig(
     filename=str(PROJECT_ROOT / "winflow.log"),
@@ -50,12 +58,13 @@ def _create_tray_icon(mode: str, recording: bool = False, paused: bool = False) 
 
 class WinFlowApp:
     def __init__(self) -> None:
+        self._first_run = not CONFIG_PATH.exists()
         self.config_mgr = ConfigManager()
         self.recorder = AudioRecorder()
         self.overlay = FloatingPillOverlay(get_audio_level=lambda: self.recorder.current_level)
         self.engine = SpeechEngine(on_status=self.overlay.show_processing)
         self.settings_ui = SettingsWindowController(
-            self.config_mgr, on_config_saved=self._on_config_updated
+            self.config_mgr, on_config_saved=lambda: self._on_config_updated(from_ui=True)
         )
         self._paused = False
         self.hotkey = AltXHotkeyListener(
@@ -200,6 +209,7 @@ class WinFlowApp:
             self._busy_transcribing.release()
 
     def _toggle_paused(self) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         self._paused = not self._paused
         if self._paused:
             self._cancel_max_timer()
@@ -213,6 +223,7 @@ class WinFlowApp:
             self.tray.update_menu()
 
     def _switch_engine_mode(self, mode: str) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         if mode == "cloud" and not self.config_mgr.has_active_cloud_key():
             self.overlay.show_toast("Add free Groq/Gemini key first", is_error=True, duration_s=2.2)
             self.settings_ui.open_settings(tab_index=0)
@@ -220,27 +231,31 @@ class WinFlowApp:
 
         self._paused = False
         self.config_mgr.update(engine_mode=mode)
-        self._on_config_updated()
+        self._on_config_updated(from_ui=False)
         badge = "Cloud API Mode" if mode == "cloud" else "Offline Local Mode"
         self.overlay.show_toast(f"Switched: {badge}", duration_s=1.3)
 
     def _set_style_mode(self, style_mode: str) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         self.config_mgr.update(style_mode=style_mode)
         if self.tray:
             self.tray.update_menu()
 
     def _toggle_fillers(self) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         cur = self.config_mgr.data.remove_fillers
         self.config_mgr.update(remove_fillers=not cur)
         if self.tray:
             self.tray.update_menu()
 
     def _toggle_startup(self) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         set_startup_enabled(not is_startup_enabled())
         if self.tray:
             self.tray.update_menu()
 
     def _copy_last_dictation(self) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
         hist = self.config_mgr.data.history
         if hist:
             set_clipboard_text(hist[0].get("cleaned", ""))
@@ -248,7 +263,7 @@ class WinFlowApp:
         else:
             self.overlay.show_toast("No history yet", duration_s=1.0)
 
-    def _on_config_updated(self) -> None:
+    def _on_config_updated(self, from_ui: bool = False) -> None:
         cfg = self.config_mgr.data
         if cfg.engine_mode == "cloud":
             self.engine.unload_local_model()
@@ -258,6 +273,9 @@ class WinFlowApp:
         self._refresh_tray_icon(recording=False)
         if self.tray:
             self.tray.update_menu()
+        if from_ui and not self.hotkey.is_recording:
+            badge = "Cloud Turbo" if cfg.engine_mode == "cloud" else f"Offline ({cfg.local_model_size})"
+            self.overlay.show_toast(f"Applied • {badge}", duration_s=1.1)
 
     def _refresh_tray_icon(self, recording: bool = False) -> None:
         if not self.tray:
@@ -348,6 +366,8 @@ class WinFlowApp:
 
     def run(self) -> int:
         if not self._acquire_single_instance():
+            # Already running in system tray -> open/focus the minimalist Settings window!
+            self.settings_ui.open_settings(0)
             return 0
 
         self.overlay.start()
@@ -363,6 +383,9 @@ class WinFlowApp:
             mode_badge = "Offline Local"
 
         self.overlay.show_toast(f"WinFlow Ready • Alt+X ({mode_badge})", duration_s=1.6)
+
+        if self._first_run and os.environ.get("WINFLOW_NO_FIRST_RUN_UI") != "1":
+            self.settings_ui.open_settings(0)
 
         self.tray = pystray.Icon(
             "winflow",

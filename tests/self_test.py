@@ -33,7 +33,8 @@ from winflow.hotkey import (
 )
 from winflow.injector import get_clipboard_text, set_clipboard_text
 from winflow.overlay import FloatingPillOverlay
-from winflow.settings_ui import SettingsWindowController
+from winflow.settings_ui import MINIMALIST_HTML, SettingsWindowController, _SettingsJsApi
+from winflow.sounds import play_sound
 
 VK_H = 0x48
 
@@ -174,20 +175,109 @@ def test_2_groq_cloud_and_ui_and_vbs() -> None:
             Path(td) / "short.wav",
         )
     eng = SpeechEngine()
-    res = eng.process_audio(samples, wav_bytes, cm.data)
-    eng.close()
+    # Test Groq Cloud (~800ms)
+    from dataclasses import replace
+    groq_cfg = replace(cm.data, engine_mode="cloud", cloud_provider="groq")
+    res = eng.process_audio(samples, wav_bytes, groq_cfg)
     print(f"  Groq Cloud result ({res.latency_ms} ms): {res.final_text!r}")
     assert res.final_text and res.latency_ms < 2500
+
+    # Also test Gemini Cloud if user has a Gemini key configured!
+    if cm.data.gemini_api_key.strip():
+        gem_cfg = replace(cm.data, engine_mode="cloud", cloud_provider="gemini")
+        res_gem = eng.process_audio(samples, wav_bytes, gem_cfg)
+        print(f"  Gemini Cloud result ({res_gem.latency_ms} ms): {res_gem.final_text!r}")
+        assert res_gem.final_text and res_gem.latency_ms < 5000
+    eng.close()
 
     assert set_clipboard_text("Alt+X Clipboard Check")
     assert get_clipboard_text() == "Alt+X Clipboard Check"
 
-    ui = SettingsWindowController(cm, on_config_saved=lambda: None)
-    ui.start()
-    ui.open_settings(0)
-    time.sleep(0.25)
-    assert ui._win is not None and ui._win.winfo_exists()
-    ui.stop()
+    # Verify tactile sound synthesis & WinMM async playback never blocks
+    t_snd = time.perf_counter()
+    play_sound("click", enabled=True)
+    play_sound("apply", enabled=True)
+    assert (time.perf_counter() - t_snd) < 0.15
+
+    # Verify isolated WebView2 Settings UI, Paste, inline Apply Key, sticky Apply & Save, and IPC reload
+    print("  Testing WebView2 minimalist UI (layout bounds, clipboard paste, Apply Key, sound)...")
+    import webview
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp_cfg = Path(td) / "ui_test_config.json"
+        cm_daemon = ConfigManager(tmp_cfg)
+        reload_hits: list[str] = []
+        ui_ctrl = SettingsWindowController(
+            cm_daemon,
+            on_config_saved=lambda: reload_hits.append(cm_daemon.data.engine_mode),
+        )
+        ui_ctrl.start()
+
+        api = _SettingsJsApi(ConfigManager(tmp_cfg), initial_tab=0)
+        ui_results: dict = {}
+
+        win = webview.create_window(
+            "WinFlow UI SelfTest",
+            html=MINIMALIST_HTML,
+            js_api=api,
+            width=580,
+            height=640,
+            background_color="#0A0B0E",
+        )
+
+        def _drive_webview() -> None:
+            try:
+                time.sleep(0.8)
+                # 1. Verify both Apply buttons exist and are 100% inside the visible viewport (never clipped!)
+                bounds = win.evaluate_js(
+                    """(() => {
+                        const b1 = document.getElementById('btnApplyKey').getBoundingClientRect();
+                        const b2 = document.getElementById('btnSaveAll').getBoundingClientRect();
+                        return {
+                            vh: window.innerHeight,
+                            vw: window.innerWidth,
+                            applyKeyVisible: b1.width > 60 && b1.height > 28 && b1.bottom <= window.innerHeight,
+                            saveAllVisible: b2.width > 80 && b2.height > 28 && b2.bottom <= window.innerHeight
+                        };
+                    })()"""
+                )
+                ui_results["bounds"] = bounds
+
+                # 2. Put real Groq key on clipboard, paste via Paste button, and verify zero freeze!
+                set_clipboard_text(cm.data.groq_api_key.strip())
+                win.evaluate_js("pasteFromClipboard()")
+                time.sleep(0.25)
+                pasted_len = win.evaluate_js("document.getElementById('apiKeyInput').value.length")
+                ui_results["pasted_len"] = pasted_len
+
+                # 3. Click inline Apply Key -> verifies key over HTTP & signals daemon!
+                win.evaluate_js("applyApiKey()")
+                for _ in range(30):
+                    status_cls = win.evaluate_js("document.getElementById('keyFeedback').className")
+                    if "ok" in (status_cls or ""):
+                        break
+                    time.sleep(0.15)
+                ui_results["feedback_cls"] = win.evaluate_js("document.getElementById('keyFeedback').className")
+                ui_results["feedback_msg"] = win.evaluate_js("document.getElementById('keyStatusMsg').textContent")
+
+                # 4. Switch tabs & test tactile sound synthesis
+                win.evaluate_js("switchTab(1); uiTone('press'); switchTab(2);")
+                time.sleep(0.2)
+                ui_results["active_pane"] = win.evaluate_js("document.getElementById('pane-2').classList.contains('active')")
+            finally:
+                win.destroy()
+
+        webview.start(_drive_webview, gui="edgechromium")
+        time.sleep(0.2)
+        ui_ctrl.stop()
+
+        print(f"  WebView2 UI check: {ui_results}, reload_hits={reload_hits}")
+        assert ui_results["bounds"]["applyKeyVisible"] is True, f"Apply Key clipped: {ui_results}"
+        assert ui_results["bounds"]["saveAllVisible"] is True, f"Apply & Save clipped: {ui_results}"
+        assert ui_results["pasted_len"] == len(cm.data.groq_api_key.strip())
+        assert "ok" in ui_results["feedback_cls"], f"Apply Key failed: {ui_results}"
+        assert ui_results["active_pane"] is True
+        assert "cloud" in reload_hits, "Daemon did not receive live reload from Apply Key!"
 
     pill = FloatingPillOverlay(get_audio_level=lambda: 0.6)
     pill.start()
