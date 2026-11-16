@@ -51,8 +51,8 @@ APP_MANIFEST_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 VERSION_INFO_TEXT = """# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 3, 1, 0),
-    prodvers=(1, 3, 1, 0),
+    filevers=(1, 4, 0, 0),
+    prodvers=(1, 4, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -68,12 +68,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'Piyush Maurya'),
             StringStruct('FileDescription', 'WinFlow'),
-            StringStruct('FileVersion', '1.3.1.0'),
+            StringStruct('FileVersion', '1.4.0.0'),
             StringStruct('InternalName', 'WinFlow'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026 Piyush Maurya'),
             StringStruct('OriginalFilename', 'WinFlow.exe'),
             StringStruct('ProductName', 'WinFlow'),
-            StringStruct('ProductVersion', '1.3.1')
+            StringStruct('ProductVersion', '1.4.0')
           ]
         )
       ]

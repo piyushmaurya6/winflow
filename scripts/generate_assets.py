@@ -188,7 +188,7 @@ def build_hero_banner() -> None:
     base.alpha_composite(logo, (72, 68))
     d.text((172, 92), "WinFlow", font=load_font(44, bold=True), fill=(246, 248, 255, 255), anchor="lm")
     d.rounded_rectangle((366, 76, 456, 108), radius=16, fill=(32, 48, 92, 240), outline=(92, 138, 255, 190), width=1)
-    d.text((411, 92), "v1.3.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
+    d.text((411, 92), "v1.4.0", font=load_font(14, bold=True, mono=True), fill=(158, 192, 255, 255), anchor="mm")
 
     d.text((76, 188), "AI Voice Dictation", font=load_font(48, bold=True), fill=(248, 250, 255, 255))
     d.text((76, 246), "for Windows 10 & 11.", font=load_font(48, bold=True), fill=(116, 162, 255, 255))
@@ -398,7 +398,7 @@ def capture_settings_tabs() -> None:
             html=MINIMALIST_HTML,
             js_api=api,
             width=500,
-            height=600,
+            height=636,
             background_color="#0A0B0E",
         )
 

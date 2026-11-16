@@ -353,6 +353,7 @@ def test_3_standalone_installer_and_compiled_exe_and_defender() -> None:
         env = os.environ.copy()
         env["LOCALAPPDATA"] = str(appdata_dir)
         env["WINFLOW_NO_FIRST_RUN_UI"] = "1"
+        env["WINFLOW_DISABLE_AUTO_UPDATE"] = "1"
         env["WINFLOW_INSTANCE_ID"] = f"_frozen_test_{os.getpid()}"
         proc = subprocess.Popen(
             [str(installed_exe)],
@@ -378,6 +379,18 @@ def test_3_standalone_installer_and_compiled_exe_and_defender() -> None:
             # Also ensure no child processes hold files open before TemporaryDirectory cleanup
             subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
             time.sleep(0.4)
+
+    # 4. Also verify `--auto-update --no-relaunch` single-bar updater GUI mode extracts cleanly!
+    with tempfile.TemporaryDirectory() as td_up:
+        up_install_dir = Path(td_up) / "AutoUpdatedWinFlow"
+        res_up = subprocess.run(
+            [str(setup_exe), "--auto-update", "--no-relaunch", f"--dir={up_install_dir}"],
+            capture_output=True,
+            text=True,
+            timeout=45.0,
+        )
+        assert res_up.returncode == 0, f"--auto-update failed with {res_up.returncode}: {res_up.stderr}"
+        assert (up_install_dir / "WinFlow.exe").exists(), "WinFlow.exe missing after --auto-update!"
 
     print("  [PASS] Test 3 passed 100%!")
 

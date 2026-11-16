@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("Piyush Maurya")]
 [assembly: AssemblyProduct("WinFlow")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Piyush Maurya")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace WinFlowSetup
 {
@@ -118,7 +118,7 @@ namespace WinFlowSetup
 
     internal static class InstallerEngine
     {
-        public const string AppVersion = "1.3.1";
+        public const string AppVersion = "1.4.0";
         public const string PublisherName = "Piyush Maurya";
         public const string UninstallRegKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\WinFlow";
 
@@ -135,7 +135,6 @@ namespace WinFlowSetup
                 using (EventWaitHandle ev = EventWaitHandle.OpenExisting(@"Local\WinFlowShutdownEvent"))
                 {
                     ev.Set();
-                    Thread.Sleep(250);
                 }
             }
             catch
@@ -145,6 +144,23 @@ namespace WinFlowSetup
             try
             {
                 int selfId = Process.GetCurrentProcess().Id;
+                // Give running WinFlow instances up to 1.2s to exit gracefully first
+                for (int w = 0; w < 12; w++)
+                {
+                    var procs = Process.GetProcessesByName("WinFlow");
+                    bool anyAlive = false;
+                    foreach (var p in procs)
+                    {
+                        if (p.Id != selfId)
+                        {
+                            anyAlive = true;
+                            break;
+                        }
+                    }
+                    if (!anyAlive) break;
+                    Thread.Sleep(100);
+                }
+
                 foreach (var p in Process.GetProcessesByName("WinFlow"))
                 {
                     try
@@ -152,7 +168,7 @@ namespace WinFlowSetup
                         if (p.Id != selfId)
                         {
                             p.Kill();
-                            p.WaitForExit(2000);
+                            p.WaitForExit(3000);
                         }
                     }
                     catch
@@ -241,7 +257,19 @@ namespace WinFlowSetup
                             {
                                 Directory.CreateDirectory(dir);
                             }
-                            entry.ExtractToFile(destPath, true);
+                            for (int attempt = 0; ; attempt++)
+                            {
+                                try
+                                {
+                                    entry.ExtractToFile(destPath, true);
+                                    break;
+                                }
+                                catch (Exception)
+                                {
+                                    if (attempt >= 12) throw;
+                                    Thread.Sleep(250);
+                                }
+                            }
                         }
 
                         done++;
@@ -431,6 +459,8 @@ namespace WinFlowSetup
         private ViewState _view = ViewState.License;
         private readonly string _installDir;
         private readonly bool _registerSystem;
+        private readonly bool _autoUpdate;
+        private readonly bool _noRelaunch;
         private readonly Panel _licenseCard;
         private readonly TextBox _licenseBox;
         private readonly ModernButton _btnCancel;
@@ -455,10 +485,12 @@ namespace WinFlowSetup
             "3. No Warranty: THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR " +
             "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.";
 
-        public SetupForm(string installDir, bool registerSystem, int previewProgressPct)
+        public SetupForm(string installDir, bool registerSystem, int previewProgressPct, bool autoUpdate, bool noRelaunch)
         {
             _installDir = installDir;
             _registerSystem = registerSystem;
+            _autoUpdate = autoUpdate;
+            _noRelaunch = noRelaunch;
 
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
@@ -572,14 +604,17 @@ namespace WinFlowSetup
             _animTimer = new System.Windows.Forms.Timer { Interval = 16 };
             _animTimer.Tick += OnAnimTick;
 
-            if (previewProgressPct >= 0)
+            if (previewProgressPct >= 0 || _autoUpdate)
             {
                 _licenseCard.Visible = false;
                 _btnCancel.Visible = false;
                 _btnInstall.Visible = false;
                 _view = ViewState.Installing;
-                _displayProgress = Math.Max(0.05, Math.Min(1.0, previewProgressPct / 100.0));
-                _targetProgress = _displayProgress;
+                if (previewProgressPct >= 0)
+                {
+                    _displayProgress = Math.Max(0.05, Math.Min(1.0, previewProgressPct / 100.0));
+                    _targetProgress = _displayProgress;
+                }
             }
         }
 
@@ -601,6 +636,11 @@ namespace WinFlowSetup
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            if (_autoUpdate)
+            {
+                BeginInstallation();
+                return;
+            }
             _licenseBox.SelectionLength = 0;
             _btnInstall.Focus();
         }
@@ -664,6 +704,18 @@ namespace WinFlowSetup
             {
                 _displayProgress = 1.0;
                 _animTimer.Stop();
+                if (_autoUpdate)
+                {
+                    if (_noRelaunch)
+                    {
+                        Close();
+                    }
+                    else
+                    {
+                        LaunchInstalledAppAndClose();
+                    }
+                    return;
+                }
                 _view = ViewState.Done;
                 _btnOpen.Visible = true;
                 _btnOpen.Focus();
@@ -751,7 +803,9 @@ namespace WinFlowSetup
 
             if (_view == ViewState.Installing || _view == ViewState.Done)
             {
-                string statusLabel = _view == ViewState.Done ? "Installed" : "Installing…";
+                string statusLabel = _view == ViewState.Done
+                    ? "Installed"
+                    : (_autoUpdate ? "Updating…" : "Installing…");
                 using (Font f = new Font("Segoe UI", 11f, FontStyle.Bold))
                 {
                     Rectangle textRect = new Rectangle(
@@ -829,6 +883,8 @@ namespace WinFlowSetup
             Application.SetCompatibleTextRenderingDefault(false);
 
             bool silent = false;
+            bool autoUpdate = false;
+            bool noRelaunch = false;
             string customDir = null;
             int previewPct = -1;
 
@@ -838,6 +894,14 @@ namespace WinFlowSetup
                     string.Equals(a, "/S", StringComparison.OrdinalIgnoreCase))
                 {
                     silent = true;
+                }
+                else if (string.Equals(a, "--auto-update", StringComparison.OrdinalIgnoreCase))
+                {
+                    autoUpdate = true;
+                }
+                else if (string.Equals(a, "--no-relaunch", StringComparison.OrdinalIgnoreCase))
+                {
+                    noRelaunch = true;
                 }
                 else if (a.StartsWith("--dir=", StringComparison.OrdinalIgnoreCase))
                 {
@@ -867,7 +931,7 @@ namespace WinFlowSetup
                 }
             }
 
-            Application.Run(new SetupForm(targetDir, registerSystem, previewPct));
+            Application.Run(new SetupForm(targetDir, registerSystem, previewPct, autoUpdate, noRelaunch));
             return 0;
         }
     }

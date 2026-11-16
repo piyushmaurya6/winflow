@@ -27,6 +27,7 @@
   "restore_clipboard": true,
   "sound_cues": true,
   "ui_sounds": true,
+  "auto_check_updates": true,
   "input_device": null,
   "history": []
 }

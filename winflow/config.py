@@ -22,6 +22,7 @@ else:
 
 CONFIG_PATH = DATA_ROOT / "config.json"
 MODELS_DIR = DATA_ROOT / "models"
+UPDATES_DIR = DATA_ROOT / "updates"
 LOG_PATH = DATA_ROOT / "winflow.log"
 
 RUN_REG_PATH = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -102,6 +103,7 @@ class AppConfig:
     restore_clipboard: bool = True
     sound_cues: bool = True
     ui_sounds: bool = True
+    auto_check_updates: bool = True
     input_device: int | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
 

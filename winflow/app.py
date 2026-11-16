@@ -5,6 +5,8 @@ import ctypes
 import logging
 import os
 import threading
+import time
+from typing import Any
 
 import pystray
 from PIL import Image, ImageDraw
@@ -23,8 +25,20 @@ from .engine import SpeechEngine
 from .hotkey import AltXHotkeyListener
 from .injector import paste_text_at_cursor, set_clipboard_text
 from .overlay import FloatingPillOverlay, enable_per_monitor_dpi
-from .settings_ui import SHUTDOWN_EVENT_NAME, SettingsWindowController, kernel32
+from .settings_ui import (
+    CHECK_UPDATE_EVENT_NAME,
+    SHUTDOWN_EVENT_NAME,
+    SettingsWindowController,
+    kernel32,
+    signal_named_event,
+)
 from .sounds import play_sound
+from .updater import (
+    UpdateInfo,
+    UpdateManager,
+    launch_update_installer,
+    prompt_user_to_install,
+)
 
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -87,6 +101,11 @@ class WinFlowApp:
         self._max_record_timer: threading.Timer | None = None
         self._mutex_handle = None
         self._shutdown_event = None
+        self._check_update_event = None
+        self.updater = UpdateManager(
+            on_update_ready=self._handle_update_ready,
+            on_status_toast=lambda msg, is_err: self.overlay.show_toast(msg, is_error=is_err, duration_s=1.4),
+        )
 
     def _acquire_single_instance(self) -> bool:
         suffix = os.environ.get("WINFLOW_INSTANCE_ID", "")
@@ -98,15 +117,55 @@ class WinFlowApp:
         return last_err != ERROR_ALREADY_EXISTS
 
     def _start_shutdown_watcher(self) -> None:
-        self._shutdown_event = kernel32.CreateEventW(None, False, False, SHUTDOWN_EVENT_NAME)
+        self._shutdown_event = kernel32.CreateEventW(None, True, False, SHUTDOWN_EVENT_NAME)
+        self._check_update_event = kernel32.CreateEventW(None, False, False, CHECK_UPDATE_EVENT_NAME)
 
         def _watch() -> None:
             while self._shutdown_event:
-                if kernel32.WaitForSingleObject(self._shutdown_event, 500) == 0:
+                if kernel32.WaitForSingleObject(self._shutdown_event, 250) == 0:
                     self.shutdown()
                     break
+                if (
+                    self._check_update_event
+                    and kernel32.WaitForSingleObject(self._check_update_event, 250) == 0
+                ):
+                    if self.config_mgr.data.auto_check_updates:
+                        self.updater.check_for_updates_async(manual=False)
 
         threading.Thread(target=_watch, name="WinFlow-ShutdownWatch", daemon=True).start()
+
+    def _handle_update_ready(self, info: UpdateInfo, manual: bool) -> None:
+        if self.tray:
+            self.tray.menu = self._build_menu()
+            self.tray.update_menu()
+
+        if not manual and self.updater.has_prompted(info.tag_name):
+            return
+
+        # Never interrupt an active dictation or paste
+        while self.hotkey.is_recording or self._busy_transcribing.locked():
+            time.sleep(0.4)
+
+        self.updater.mark_prompted(info.tag_name)
+        play_sound("apply", enabled=self.config_mgr.data.ui_sounds)
+        if prompt_user_to_install(info) and info.installer_path:
+            signal_named_event(SHUTDOWN_EVENT_NAME)
+            launch_update_installer(info.installer_path)
+            self.shutdown()
+
+    def _manual_check_updates(self) -> None:
+        play_sound("click", enabled=self.config_mgr.data.ui_sounds)
+        ready = self.updater.ready_update
+        if ready and ready.installer_path and ready.installer_path.exists():
+            threading.Thread(
+                target=self._handle_update_ready,
+                args=(ready, True),
+                name="WinFlow-PromptUpdate",
+                daemon=True,
+            ).start()
+            return
+        self.overlay.show_toast("Checking updates…", duration_s=1.0)
+        self.updater.check_for_updates_async(manual=True)
 
     def _cancel_max_timer(self) -> None:
         if self._max_record_timer is not None:
@@ -360,17 +419,30 @@ class WinFlowApp:
         )
 
     def _build_menu(self) -> pystray.Menu:
-        return pystray.Menu(
+        top_items: list[Any] = [
             pystray.MenuItem(
                 "Open WinFlow",
                 lambda icon, item: self.settings_ui.open_settings(0),
                 default=True,
             ),
+        ]
+        ready = self.updater.ready_update
+        if ready and ready.installer_path and ready.installer_path.exists():
+            top_items.append(
+                pystray.MenuItem(
+                    f"Install Update ({ready.tag_name})",
+                    lambda icon, item: self._manual_check_updates(),
+                )
+            )
+        top_items.append(
             pystray.MenuItem(
                 "Pause",
                 lambda icon, item: self._toggle_paused(),
                 checked=lambda item: self._paused,
-            ),
+            )
+        )
+        return pystray.Menu(
+            *top_items,
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(
                 "Cloud",
@@ -460,6 +532,10 @@ class WinFlowApp:
                 lambda icon, item: self._toggle_startup(),
                 checked=lambda item: is_startup_enabled(),
             ),
+            pystray.MenuItem(
+                "Check for Updates",
+                lambda icon, item: self._manual_check_updates(),
+            ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Quit", lambda icon, item: self.shutdown()),
         )
@@ -490,6 +566,9 @@ class WinFlowApp:
         if self._first_run and os.environ.get("WINFLOW_NO_FIRST_RUN_UI") != "1":
             self.settings_ui.open_settings(0)
 
+        if cfg.auto_check_updates and os.environ.get("WINFLOW_DISABLE_AUTO_UPDATE") != "1":
+            self.updater.check_for_updates_async(manual=False, delay_s=2.5)
+
         self.tray = pystray.Icon(
             "winflow",
             icon=_create_tray_icon(mode=cfg.engine_mode),
@@ -501,6 +580,9 @@ class WinFlowApp:
         return 0
 
     def shutdown(self) -> None:
+        if self._check_update_event:
+            kernel32.CloseHandle(self._check_update_event)
+            self._check_update_event = None
         if self._shutdown_event:
             kernel32.CloseHandle(self._shutdown_event)
             self._shutdown_event = None

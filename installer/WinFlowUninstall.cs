@@ -10,8 +10,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("Piyush Maurya")]
 [assembly: AssemblyProduct("WinFlow")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Piyush Maurya")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
 
 namespace WinFlowUninstall
 {

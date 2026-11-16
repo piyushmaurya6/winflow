@@ -2,6 +2,13 @@
 
 All notable changes to **WinFlow** are documented in this file.
 
+## [1.4.0] - 2026-11-16
+
+### Added
+- **Automatic GitHub Update Checker & Downloader (`winflow/updater.py`)**: Every time WinFlow starts or opens, it checks `piyushmaurya6/winflow` on GitHub for a newer release in the background. When an update is available, WinFlow automatically downloads and SHA-256-verifies `WinFlow-Setup.exe` in the background and prompts you to update and restart in one click.
+- **Single-Bar `--auto-update` Installer Mode (`installer/WinFlowSetup.cs`)**: Clicking **Yes** on the update prompt runs `WinFlow-Setup.exe --auto-update` with a single smooth `Updating…` progress bar, replaces `WinFlow.exe` while keeping all saved API keys and offline models intact, and automatically relaunches WinFlow.
+- **Manual `Check Update` Controls**: Added one-click `Check Update` in the app footer, `Check for Updates` in the System Tray menu, and an `Auto-Check Updates` toggle in Settings.
+
 ## [1.3.1] - 2026-11-16
 
 ### Fixed

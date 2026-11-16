@@ -47,6 +47,7 @@ Press **`Alt + X`** in any app to speak and paste clean text in ~0.8s, while kee
 
 ## ✨ Features
 
+- **Automatic GitHub Updates** — Checks GitHub for new releases automatically whenever WinFlow opens, downloads and SHA-256-verifies the update in the background, and prompts you to update and restart in one click.
 - **Standalone Native `.exe` App & Installer** — Self-contained 64-bit `WinFlow-Setup.exe` and `WinFlow.exe` licensed by **Piyush Maurya**, with clean Desktop/Start Menu shortcuts and Windows Installed Apps (`Uninstall-WinFlow.exe`) support.
 - **Simple, Clean Native App UI** — Minimalist dark Windows 11 interface with tactile button sounds, zero clutter, and instant `Paste` + `Apply` API key setup.
 - **Hinglish + English + Hindi** — Speak Hindi in **`Hinglish`** mode to type clean Romanized English letters (like `"Apna"`), or switch to **`English`**, **`Hindi`**, or **`Auto`**.

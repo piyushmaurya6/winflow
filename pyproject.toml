@@ -1,6 +1,6 @@
 [project]
 name = "winflow"
-version = "1.3.1"
+version = "1.4.0"
 description = "Fast AI Voice Dictation for Windows 10/11 (Alt+X)"
 authors = [{ name = "Piyush Maurya" }]
 license = { text = "MIT" }

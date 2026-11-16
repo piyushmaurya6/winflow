@@ -47,6 +47,12 @@ from winflow.overlay import (
 )
 from winflow.settings_ui import MINIMALIST_HTML, SettingsWindowController, _SettingsJsApi
 from winflow.sounds import _build_cue_wav, play_sound
+from winflow.updater import (
+    UpdateManager,
+    extract_release_update_info,
+    is_newer_version,
+    parse_version,
+)
 
 VK_H = 0x48
 
@@ -276,6 +282,108 @@ def test_overlay_topmost_z_order_and_self_healing() -> None:
         pill.stop()
 
 
+def test_auto_updater_github_check_and_download() -> None:
+    import hashlib
+    import http.server
+    import json
+    import socketserver
+    import threading
+
+    assert parse_version("v1.4.0") == (1, 4, 0)
+    assert is_newer_version("v1.4.1", "1.4.0") is True
+    assert is_newer_version("v1.4.0", "1.4.0") is False
+    assert is_newer_version("v1.3.1", "1.4.0") is False
+
+    fake_pe = b"MZ" + (b"\x90" * 8190)
+    good_sha = hashlib.sha256(fake_pe).hexdigest()
+
+    state_holder = {"sha_in_body": good_sha, "downloads": 0}
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            if self.path == "/releases/latest":
+                port = self.server.server_address[1]
+                payload = {
+                    "tag_name": "v9.9.9",
+                    "draft": False,
+                    "prerelease": False,
+                    "html_url": "https://github.com/piyushmaurya6/winflow/releases/tag/v9.9.9",
+                    "body": f"- `WinFlow-Setup.exe`: `{state_holder['sha_in_body']}`",
+                    "assets": [
+                        {
+                            "name": "WinFlow-Setup.exe",
+                            "size": len(fake_pe),
+                            "browser_download_url": f"http://127.0.0.1:{port}/WinFlow-Setup.exe",
+                        }
+                    ],
+                }
+                raw = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            elif self.path == "/WinFlow-Setup.exe":
+                state_holder["downloads"] += 1
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(len(fake_pe)))
+                self.end_headers()
+                self.wfile.write(fake_pe)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    with socketserver.TCPServer(("127.0.0.1", 0), _Handler) as httpd:
+        port = httpd.server_address[1]
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                up_dir = Path(td) / "updates"
+                ready_hits: list[str] = []
+
+                # 1. Bad SHA-256 must be rejected
+                state_holder["sha_in_body"] = "0" * 64
+                mgr_bad = UpdateManager(
+                    current_version="1.4.0",
+                    api_url=f"http://127.0.0.1:{port}/releases/latest",
+                    updates_dir=up_dir,
+                    on_update_ready=lambda info, m: ready_hits.append(info.tag_name),
+                    min_auto_interval_s=0.0,
+                )
+                assert mgr_bad.check_and_download_sync() is None
+                assert mgr_bad.status == "error"
+                assert ready_hits == []
+
+                # 2. Valid SHA-256 downloads, verifies, and fires callback
+                state_holder["sha_in_body"] = good_sha
+                state_holder["downloads"] = 0
+                mgr = UpdateManager(
+                    current_version="1.4.0",
+                    api_url=f"http://127.0.0.1:{port}/releases/latest",
+                    updates_dir=up_dir,
+                    on_update_ready=lambda info, m: ready_hits.append(info.tag_name),
+                    min_auto_interval_s=0.0,
+                )
+                res = mgr.check_and_download_sync()
+                assert res is not None and res.tag_name == "v9.9.9"
+                assert res.installer_path and res.installer_path.exists()
+                assert state_holder["downloads"] == 1
+                assert ready_hits == ["v9.9.9"]
+
+                # 3. Second check reuses verified cache without re-downloading
+                res2 = mgr.check_and_download_sync()
+                assert res2 is not None and state_holder["downloads"] == 1
+        finally:
+            httpd.shutdown()
+
+    assert extract_release_update_info({"tag_name": "v9.9.9", "draft": True}, "1.4.0") is None
+
+
 if __name__ == "__main__":
     test_win32_struct_sizes()
     test_minimal_ui_has_no_overexplanation_or_examples()
@@ -283,4 +391,5 @@ if __name__ == "__main__":
     test_config_and_settings_ipc()
     test_alt_x_hook_and_win_h_passthrough()
     test_overlay_topmost_z_order_and_self_healing()
+    test_auto_updater_github_check_and_download()
     print("All CI unit tests passed!")

@@ -20,6 +20,7 @@ from typing import Any
 
 import httpx
 
+from . import __version__
 from .audio import list_input_devices
 from .config import (
     ASSET_ROOT,
@@ -27,17 +28,20 @@ from .config import (
     IS_FROZEN,
     PROJECT_ROOT,
     PROVIDER_SPECS,
+    UPDATES_DIR,
     ConfigManager,
     is_startup_enabled,
     set_startup_enabled,
 )
 from .injector import get_clipboard_text, set_clipboard_text
+from .updater import UpdateInfo, UpdateManager, launch_update_installer, prompt_user_to_install
 
 _INSTANCE_SUFFIX = os.environ.get("WINFLOW_INSTANCE_ID", "")
 RELOAD_EVENT_NAME = f"Local\\WinFlowReloadConfigEvent{_INSTANCE_SUFFIX}"
 FOCUS_SETTINGS_EVENT_NAME = f"Local\\WinFlowFocusSettingsEvent{_INSTANCE_SUFFIX}"
 SETTINGS_MUTEX_NAME = f"Local\\WinFlowSettingsWindowMutex{_INSTANCE_SUFFIX}"
 SHUTDOWN_EVENT_NAME = f"Local\\WinFlowShutdownEvent{_INSTANCE_SUFFIX}"
+CHECK_UPDATE_EVENT_NAME = f"Local\\WinFlowCheckUpdateEvent{_INSTANCE_SUFFIX}"
 
 CREATE_NO_WINDOW = 0x08000000
 EVENT_MODIFY_STATE = 0x0002
@@ -95,6 +99,7 @@ class SettingsWindowController:
                         pass
 
     def open_settings(self, tab_index: int = 0) -> None:
+        signal_named_event(CHECK_UPDATE_EVENT_NAME)
         h_focus = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, FOCUS_SETTINGS_EVENT_NAME)
         if h_focus:
             kernel32.SetEvent(h_focus)
@@ -898,6 +903,11 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
           <span class="row-title">Launch at Startup</span>
           <button class="switch" id="swStartup" onclick="toggleStartup()"></button>
         </div>
+
+        <div class="row">
+          <span class="row-title">Auto-Check Updates</span>
+          <button class="switch" id="swAutoUpdate" onclick="toggleBool('auto_check_updates', 'swAutoUpdate')"></button>
+        </div>
       </div>
     </section>
 
@@ -910,6 +920,9 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
   <footer class="footer">
     <div class="kbd-hint">
       <kbd>Alt</kbd> + <kbd>X</kbd>
+      <span style="opacity:0.35;margin:0 2px">•</span>
+      <span id="appVerLabel">v1.4.0</span>
+      <button class="text-link" id="btnCheckUpdate" style="margin-left:3px" onclick="handleUpdateClick()">Check Update</button>
     </div>
     <button class="btn-primary" id="btnSaveAll" style="height:32px;padding:0 16px" onclick="saveAllSettings(true)">Save</button>
   </footer>
@@ -944,8 +957,11 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     restore_clipboard: true,
     sound_cues: true,
     ui_sounds: true,
+    auto_check_updates: true,
     input_device: null,
     startup: false,
+    version: "1.4.0",
+    ready_update: null,
     history: []
   };
 
@@ -1109,6 +1125,19 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     document.getElementById("swClipboard").classList.toggle("on", !!state.restore_clipboard);
     document.getElementById("swCues").classList.toggle("on", !!state.sound_cues);
     document.getElementById("swStartup").classList.toggle("on", !!state.startup);
+    document.getElementById("swAutoUpdate").classList.toggle("on", state.auto_check_updates !== false);
+
+    document.getElementById("appVerLabel").textContent = `v${state.version || "1.4.0"}`;
+    const upBtn = document.getElementById("btnCheckUpdate");
+    if (state.ready_update && state.ready_update.tag_name) {
+      upBtn.textContent = `Update ${state.ready_update.tag_name}`;
+      upBtn.style.color = "var(--green)";
+      upBtn.style.fontWeight = "600";
+    } else if (!upBtn.dataset.busy) {
+      upBtn.textContent = "Check Update";
+      upBtn.style.color = "";
+      upBtn.style.fontWeight = "";
+    }
 
     const dicEl = document.getElementById("dictInput");
     if (document.activeElement !== dicEl) {
@@ -1349,6 +1378,44 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     saveAllSettings(false);
   }
 
+  async function handleUpdateClick() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const btn = document.getElementById("btnCheckUpdate");
+    if (btn.dataset.busy === "1") return;
+
+    if (state.ready_update && state.ready_update.installer_path) {
+      uiTone("apply");
+      await window.pywebview.api.prompt_and_install_update(
+        state.ready_update.tag_name,
+        state.ready_update.installer_path
+      );
+      return;
+    }
+
+    uiTone("press");
+    btn.dataset.busy = "1";
+    btn.textContent = "Checking…";
+    try {
+      const res = await window.pywebview.api.check_update_now();
+      delete btn.dataset.busy;
+      if (res && res.status === "ready") {
+        state.ready_update = res;
+        uiTone("apply");
+        renderUI();
+        await window.pywebview.api.prompt_and_install_update(res.tag_name, res.installer_path);
+      } else if (res && res.status === "up_to_date") {
+        btn.textContent = "Up to date ✓";
+        setTimeout(() => renderUI(), 1600);
+      } else {
+        btn.textContent = "Offline";
+        setTimeout(() => renderUI(), 1600);
+      }
+    } catch (e) {
+      delete btn.dataset.busy;
+      renderUI();
+    }
+  }
+
   async function saveAllSettings(explicitClick = false) {
     captureCurrentKeyInput();
     state.custom_dictionary = document.getElementById("dictInput").value.trim();
@@ -1399,6 +1466,17 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       }
       sel.appendChild(opt);
     });
+
+    // If opened standalone without background daemon, run silent update check when enabled
+    if (state.auto_check_updates !== false && !state.ready_update) {
+      window.pywebview.api.check_update_silent_if_standalone().then(res => {
+        if (res && res.status === "ready") {
+          state.ready_update = res;
+          renderUI();
+          window.pywebview.api.prompt_and_install_update(res.tag_name, res.installer_path);
+        }
+      }).catch(() => {});
+    }
   });
 </script>
 </body>
@@ -1410,6 +1488,21 @@ class _SettingsJsApi:
     def __init__(self, config_mgr: ConfigManager, initial_tab: int = 0) -> None:
         self.config_mgr = config_mgr
         self.initial_tab = initial_tab
+        self._updater = UpdateManager(current_version=__version__, updates_dir=UPDATES_DIR)
+
+    def _find_cached_ready_update(self) -> dict[str, str] | None:
+        try:
+            if not UPDATES_DIR.exists():
+                return None
+            for exe in sorted(UPDATES_DIR.glob("WinFlow-Setup-v*.exe"), reverse=True):
+                tag = exe.stem.replace("WinFlow-Setup-", "")
+                from .updater import is_newer_version, verify_installer_file
+
+                if is_newer_version(tag, __version__) and verify_installer_file(exe):
+                    return {"tag_name": tag, "installer_path": str(exe)}
+        except Exception:
+            pass
+        return None
 
     def get_state(self) -> dict[str, Any]:
         cfg = self.config_mgr.load()
@@ -1429,11 +1522,52 @@ class _SettingsJsApi:
             "restore_clipboard": cfg.restore_clipboard,
             "sound_cues": cfg.sound_cues,
             "ui_sounds": cfg.ui_sounds,
+            "auto_check_updates": cfg.auto_check_updates,
             "input_device": cfg.input_device,
             "startup": is_startup_enabled(),
+            "version": __version__,
+            "ready_update": self._find_cached_ready_update(),
             "history": cfg.history,
             "initial_tab": self.initial_tab,
         }
+
+    def check_update_now(self) -> dict[str, Any]:
+        info = self._updater.check_and_download_sync(manual=True)
+        if info and info.installer_path:
+            return {
+                "status": "ready",
+                "version": info.version,
+                "tag_name": info.tag_name,
+                "installer_path": str(info.installer_path),
+            }
+        return {"status": self._updater.status}
+
+    def check_update_silent_if_standalone(self) -> dict[str, Any]:
+        # Skip if background tray daemon is running (it already owns auto-check via CHECK_UPDATE_EVENT_NAME)
+        h_daemon = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, CHECK_UPDATE_EVENT_NAME)
+        if h_daemon:
+            kernel32.CloseHandle(h_daemon)
+            return {"status": "delegated"}
+        info = self._updater.check_and_download_sync(manual=False)
+        if info and info.installer_path:
+            return {
+                "status": "ready",
+                "version": info.version,
+                "tag_name": info.tag_name,
+                "installer_path": str(info.installer_path),
+            }
+        return {"status": self._updater.status}
+
+    def prompt_and_install_update(self, tag_name: str, installer_path: str) -> bool:
+        p = Path(installer_path)
+        if not p.exists():
+            return False
+        info = UpdateInfo(version=tag_name.lstrip("vV"), tag_name=tag_name, download_url="", installer_path=p)
+        if prompt_user_to_install(info):
+            signal_named_event(SHUTDOWN_EVENT_NAME)
+            launch_update_installer(p)
+            return True
+        return False
 
     def get_microphones(self) -> list[list[Any]]:
         return [[dev_id, name] for dev_id, name in list_input_devices()]
@@ -1543,6 +1677,7 @@ class _SettingsJsApi:
             "restore_clipboard",
             "sound_cues",
             "ui_sounds",
+            "auto_check_updates",
             "input_device",
         }
         clean = {k: payload[k] for k in allowed if k in payload}
@@ -1593,6 +1728,7 @@ def run_standalone_settings_window(
         return 0
 
     focus_event = kernel32.CreateEventW(None, False, False, FOCUS_SETTINGS_EVENT_NAME)
+    shutdown_event = kernel32.CreateEventW(None, True, False, SHUTDOWN_EVENT_NAME)
     cm = ConfigManager(config_path)
     api = _SettingsJsApi(cm, initial_tab=initial_tab)
     win_title = "WinFlow"
@@ -1602,7 +1738,7 @@ def run_standalone_settings_window(
         html=MINIMALIST_HTML,
         js_api=api,
         width=500,
-        height=600,
+        height=636,
         min_size=(460, 480),
         background_color="#0A0B0E",
     )
@@ -1611,7 +1747,13 @@ def run_standalone_settings_window(
 
     def _focus_watcher() -> None:
         while alive[0] and focus_event:
-            if kernel32.WaitForSingleObject(focus_event, 400) == 0:
+            if shutdown_event and kernel32.WaitForSingleObject(shutdown_event, 0) == 0:
+                try:
+                    window.destroy()
+                except Exception:
+                    pass
+                break
+            if kernel32.WaitForSingleObject(focus_event, 300) == 0:
                 try:
                     window.restore()
                     window.show()
@@ -1629,6 +1771,8 @@ def run_standalone_settings_window(
         webview.start(_on_shown, gui="edgechromium")
     finally:
         alive[0] = False
+        if shutdown_event:
+            kernel32.CloseHandle(shutdown_event)
         if focus_event:
             kernel32.CloseHandle(focus_event)
         if mutex:
