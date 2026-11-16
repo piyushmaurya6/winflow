@@ -2,6 +2,14 @@
 
 All notable changes to **WinFlow** are documented in this file.
 
+## [1.3.1] - 2026-11-16
+
+### Fixed
+- **Floating Speaking Overlay Visibility (`winflow/overlay.py`)**:
+  - Added explicit `SetWindowPos(HWND_TOPMOST, ..., SWP_NOACTIVATE | SWP_SHOWWINDOW)` Z-order promotion when showing and animating the pill so Windows 11 taskbars, maximized browsers/IDEs, and startup-order topmost bands never bury the overlay after `SW_HIDE`.
+  - Enabled native **Per-Monitor V2 DPI Awareness** (`PerMonitorV2` manifest + `SetProcessDpiAwarenessContext`) and active-monitor work-area tracking (`MonitorFromWindow` / `MonitorFromPoint` + `MONITORINFO.rcWork` + `GetDpiForMonitor`) so the pill always renders crisply above the taskbar on whichever monitor you are actively using.
+  - Added automatic HWND self-healing (`PostThreadMessageW` fallback + `UpdateLayeredWindow` verification) to recover seamlessly after lock screen, display sleep, or monitor hotplug.
+
 ## [1.3.0] - 2026-11-15
 
 ### Added

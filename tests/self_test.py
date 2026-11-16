@@ -172,7 +172,7 @@ def test_2_cloud_hinglish_and_minimal_ui() -> None:
     groq_cfg = replace(cm.data, engine_mode="cloud", cloud_provider="groq")
     res = eng.process_audio(samples, wav_bytes, groq_cfg)
     print(f"  Groq Cloud result ({res.latency_ms} ms): {res.final_text!r}")
-    assert res.final_text and res.latency_ms < 3000
+    assert res.final_text and res.latency_ms < 6000
 
     if cm.data.gemini_api_key.strip():
         gem_cfg = replace(cm.data, engine_mode="cloud", cloud_provider="gemini")

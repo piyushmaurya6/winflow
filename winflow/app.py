@@ -22,7 +22,7 @@ from .config import (
 from .engine import SpeechEngine
 from .hotkey import AltXHotkeyListener
 from .injector import paste_text_at_cursor, set_clipboard_text
-from .overlay import FloatingPillOverlay
+from .overlay import FloatingPillOverlay, enable_per_monitor_dpi
 from .settings_ui import SHUTDOWN_EVENT_NAME, SettingsWindowController, kernel32
 from .sounds import play_sound
 
@@ -516,6 +516,7 @@ class WinFlowApp:
 
 
 def main() -> None:
+    enable_per_monitor_dpi()
     app = WinFlowApp()
     raise SystemExit(app.run())
 

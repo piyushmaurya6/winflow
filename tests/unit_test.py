@@ -35,6 +35,16 @@ from winflow.hotkey import (
     WM_SYSKEYDOWN,
     WM_SYSKEYUP,
 )
+from winflow.overlay import (
+    FloatingPillOverlay,
+    HWND_TOPMOST,
+    SWP_NOACTIVATE,
+    SWP_SHOWWINDOW,
+    WS_EX_NOACTIVATE,
+    WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST,
+    WS_POPUP,
+)
 from winflow.settings_ui import MINIMALIST_HTML, SettingsWindowController, _SettingsJsApi
 from winflow.sounds import _build_cue_wav, play_sound
 
@@ -201,10 +211,76 @@ def test_alt_x_hook_and_win_h_passthrough() -> None:
         hk.stop()
 
 
+def test_overlay_topmost_z_order_and_self_healing() -> None:
+    import ctypes.wintypes as wt
+    from winflow.overlay import user32
+
+    pill = FloatingPillOverlay(lambda: 0.7)
+    pill.start()
+    orig_hwnd = pill._hwnd
+    assert orig_hwnd
+    competing = None
+    try:
+        pill.show_toast("Ready", duration_s=0.18)
+        time.sleep(0.08)
+        assert user32.IsWindowVisible(pill._hwnd)
+        time.sleep(0.22)
+        assert not user32.IsWindowVisible(pill._hwnd)
+
+        competing = user32.CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            "STATIC",
+            "CompetingTop",
+            WS_POPUP,
+            400,
+            600,
+            300,
+            80,
+            None,
+            None,
+            None,
+            None,
+        )
+        user32.SetWindowPos(competing, HWND_TOPMOST, 400, 600, 300, 80, SWP_NOACTIVATE | SWP_SHOWWINDOW)
+
+        pill.show_listening("Listening… (Alt+X)")
+        time.sleep(0.14)
+        assert user32.IsWindowVisible(pill._hwnd)
+
+        user32.GetTopWindow.argtypes = [wt.HWND]
+        user32.GetTopWindow.restype = wt.HWND
+        user32.GetWindow.argtypes = [wt.HWND, wt.UINT]
+        user32.GetWindow.restype = wt.HWND
+        cur = user32.GetTopWindow(None)
+        order: list[str] = []
+        while cur:
+            if cur == pill._hwnd:
+                order.append("PILL")
+            elif cur == competing:
+                order.append("COMPETING")
+            cur = user32.GetWindow(cur, 2)
+        assert order == ["PILL", "COMPETING"], f"Pill lost topmost Z-order: {order}"
+
+        # Simulate HWND loss and verify PostThreadMessageW self-recovery
+        pill.hide()
+        time.sleep(0.08)
+        user32.PostMessageW(orig_hwnd, 0x0010, 0, 0)  # WM_CLOSE
+        time.sleep(0.08)
+        assert not user32.IsWindow(orig_hwnd)
+        pill.show_listening("Listening… (Alt+X)")
+        time.sleep(0.16)
+        assert pill._hwnd and pill._hwnd != orig_hwnd and user32.IsWindowVisible(pill._hwnd)
+    finally:
+        if competing:
+            user32.DestroyWindow(competing)
+        pill.stop()
+
+
 if __name__ == "__main__":
     test_win32_struct_sizes()
     test_minimal_ui_has_no_overexplanation_or_examples()
     test_cleaner_disfluencies_and_commands()
     test_config_and_settings_ipc()
     test_alt_x_hook_and_win_h_passthrough()
+    test_overlay_topmost_z_order_and_self_healing()
     print("All CI unit tests passed!")

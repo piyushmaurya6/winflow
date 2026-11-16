@@ -1,6 +1,6 @@
 """
-Builds native standalone WinFlow.exe (PyInstaller x64, no UPX) and WinFlow-Setup.exe (native C# x64 installer
-licensed by Piyush Maurya with embedded payload and single smooth progress bar).
+Builds native standalone WinFlow.exe (PyInstaller x64, PerMonitorV2 DPI manifest, no UPX) and
+WinFlow-Setup.exe (native C# x64 installer licensed by Piyush Maurya).
 """
 
 from __future__ import annotations
@@ -17,11 +17,42 @@ DIST_DIR = PROJECT_ROOT / "dist"
 RELEASE_DIR = PROJECT_ROOT / "release_artifacts"
 CSC_EXE = Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe")
 
+APP_MANIFEST_XML = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}"/>
+      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a6e38}"/>
+    </application>
+  </compatibility>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"""
+
 VERSION_INFO_TEXT = """# UTF-8
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 3, 0, 0),
-    prodvers=(1, 3, 0, 0),
+    filevers=(1, 3, 1, 0),
+    prodvers=(1, 3, 1, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -37,12 +68,12 @@ VSVersionInfo(
           [
             StringStruct('CompanyName', 'Piyush Maurya'),
             StringStruct('FileDescription', 'WinFlow'),
-            StringStruct('FileVersion', '1.3.0.0'),
+            StringStruct('FileVersion', '1.3.1.0'),
             StringStruct('InternalName', 'WinFlow'),
             StringStruct('LegalCopyright', 'Copyright (c) 2026 Piyush Maurya'),
             StringStruct('OriginalFilename', 'WinFlow.exe'),
             StringStruct('ProductName', 'WinFlow'),
-            StringStruct('ProductVersion', '1.3.0')
+            StringStruct('ProductVersion', '1.3.1')
           ]
         )
       ]
@@ -116,14 +147,17 @@ def main() -> None:
     app_dist = DIST_DIR / "WinFlow"
     assert (app_dist / "WinFlow.exe").exists(), "WinFlow.exe missing after PyInstaller build!"
 
-    # Ensure top-level assets/winflow.ico exists alongside WinFlow.exe for shortcut icons
     top_assets = app_dist / "assets"
     top_assets.mkdir(exist_ok=True)
     shutil.copy2(ico_path, top_assets / "winflow.ico")
     shutil.copy2(PROJECT_ROOT / "LICENSE", app_dist / "LICENSE.txt")
 
-    # Security sanity check: ensure zero user config or logs leaked into bundle
-    for forbidden in list(app_dist.rglob("config.json")) + list(app_dist.rglob("*.log")) + list(app_dist.rglob("*.bat")) + list(app_dist.rglob("*.vbs")):
+    for forbidden in (
+        list(app_dist.rglob("config.json"))
+        + list(app_dist.rglob("*.log"))
+        + list(app_dist.rglob("*.bat"))
+        + list(app_dist.rglob("*.vbs"))
+    ):
         raise RuntimeError(f"Forbidden file inside bundle: {forbidden}")
 
     print("[2/5] Compiling native 64-bit Uninstall-WinFlow.exe...")
