@@ -181,10 +181,18 @@ class WinFlowApp:
 
         cfg = self.config_mgr.data
         try:
-            self.recorder.start(device=cfg.input_device)
+            self.recorder.start(
+                device=cfg.input_device,
+                device_name=cfg.input_device_name,
+                on_waiting=self.overlay.show_processing,
+                should_abort=lambda: not self.hotkey.is_recording,
+            )
         except Exception as exc:
             self.hotkey.reset_state()
-            self.overlay.show_toast(f"Mic error: {exc}", is_error=True, duration_s=2.2)
+            if str(exc) == "Cancelled":
+                self.overlay.hide()
+                return
+            self.overlay.show_toast(str(exc), is_error=True, duration_s=2.2)
             return
 
         self._cancel_max_timer()

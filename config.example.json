@@ -29,5 +29,6 @@
   "ui_sounds": true,
   "auto_check_updates": true,
   "input_device": null,
+  "input_device_name": "",
   "history": []
 }

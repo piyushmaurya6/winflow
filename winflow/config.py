@@ -105,6 +105,7 @@ class AppConfig:
     ui_sounds: bool = True
     auto_check_updates: bool = True
     input_device: int | None = None
+    input_device_name: str = ""
     history: list[dict[str, Any]] = field(default_factory=list)
 
     def sync_keys(self) -> None:

@@ -18,8 +18,8 @@ using Microsoft.Win32;
 [assembly: AssemblyCompany("Piyush Maurya")]
 [assembly: AssemblyProduct("WinFlow")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Piyush Maurya")]
-[assembly: AssemblyVersion("1.4.0.0")]
-[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyVersion("1.4.1.0")]
+[assembly: AssemblyFileVersion("1.4.1.0")]
 
 namespace WinFlowSetup
 {
@@ -118,7 +118,7 @@ namespace WinFlowSetup
 
     internal static class InstallerEngine
     {
-        public const string AppVersion = "1.4.0";
+        public const string AppVersion = "1.4.1";
         public const string PublisherName = "Piyush Maurya";
         public const string UninstallRegKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\WinFlow";
 

@@ -2,6 +2,14 @@
 
 All notable changes to **WinFlow** are documented in this file.
 
+## [1.4.1] - 2026-11-22
+
+### Fixed
+- **Bluetooth Earbuds & Hotplug Microphone Auto-Detection (`winflow/audio.py`)**:
+  - Fixed `Mic error` on Desktop PCs without a built-in microphone when connecting Bluetooth earbuds/headsets after WinFlow has already started: WinFlow now detects live Windows `waveIn` audio endpoint changes in <1 ms and automatically re-initializes PortAudio (`sd._terminate()` + `sd._initialize()`) without requiring an app restart.
+  - Added a 4.5-second **`Connecting mic…`** Bluetooth HFP handshake grace window if you press `Alt + X` while your Bluetooth earbuds are still finishing Windows' 4–5 second connection refresh.
+  - Added name-based microphone persistence (`input_device_name`), automatic fallback to any connected mic, automatic sample-rate adaptation (`8 kHz` / `44.1 kHz` / `48 kHz` → `16 kHz`), and live `Microphone` dropdown refresh in Settings (filtering out dormant `WDM-KS` ghost drivers).
+
 ## [1.4.0] - 2026-11-16
 
 ### Added

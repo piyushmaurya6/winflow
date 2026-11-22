@@ -886,7 +886,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
 
         <div class="row">
           <span class="row-title">Microphone</span>
-          <select class="clean-select" id="micSelect" onchange="onMicChanged()"></select>
+          <select class="clean-select" id="micSelect" onfocus="refreshMicrophones()" onchange="onMicChanged()"></select>
         </div>
 
         <div class="row">
@@ -959,6 +959,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     ui_sounds: true,
     auto_check_updates: true,
     input_device: null,
+    input_device_name: "",
     startup: false,
     version: "1.4.0",
     ready_update: null,
@@ -1371,10 +1372,40 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
     saveAllSettings(false);
   }
 
+  async function refreshMicrophones() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    try {
+      const mics = await window.pywebview.api.get_microphones();
+      const sel = document.getElementById("micSelect");
+      sel.innerHTML = "";
+      let matched = false;
+      mics.forEach(([id, name]) => {
+        const opt = document.createElement("option");
+        opt.value = id === null ? "" : String(id);
+        opt.dataset.micName = id === null ? "" : name;
+        opt.textContent = name;
+        if (
+          (id === null && state.input_device === null && !state.input_device_name) ||
+          (state.input_device_name && name.toLowerCase() === state.input_device_name.toLowerCase()) ||
+          (!matched && id !== null && id === state.input_device)
+        ) {
+          opt.selected = true;
+          matched = true;
+        }
+        sel.appendChild(opt);
+      });
+      if (!matched && sel.options.length > 0) {
+        sel.options[0].selected = true;
+      }
+    } catch (e) {}
+  }
+
   function onMicChanged() {
     uiTone("tab");
     const sel = document.getElementById("micSelect");
+    const opt = sel.options[sel.selectedIndex];
     state.input_device = sel.value === "" ? null : parseInt(sel.value, 10);
+    state.input_device_name = (opt && opt.dataset.micName) ? opt.dataset.micName : "";
     saveAllSettings(false);
   }
 
@@ -1454,18 +1485,7 @@ MINIMALIST_HTML = r"""<!DOCTYPE html>
       setFeedback("");
     }
 
-    const mics = await window.pywebview.api.get_microphones();
-    const sel = document.getElementById("micSelect");
-    sel.innerHTML = "";
-    mics.forEach(([id, name]) => {
-      const opt = document.createElement("option");
-      opt.value = id === null ? "" : String(id);
-      opt.textContent = name;
-      if (id === state.input_device || (id === null && state.input_device === null)) {
-        opt.selected = true;
-      }
-      sel.appendChild(opt);
-    });
+    await refreshMicrophones();
 
     // If opened standalone without background daemon, run silent update check when enabled
     if (state.auto_check_updates !== false && !state.ready_update) {
@@ -1524,6 +1544,7 @@ class _SettingsJsApi:
             "ui_sounds": cfg.ui_sounds,
             "auto_check_updates": cfg.auto_check_updates,
             "input_device": cfg.input_device,
+            "input_device_name": cfg.input_device_name,
             "startup": is_startup_enabled(),
             "version": __version__,
             "ready_update": self._find_cached_ready_update(),
@@ -1679,6 +1700,7 @@ class _SettingsJsApi:
             "ui_sounds",
             "auto_check_updates",
             "input_device",
+            "input_device_name",
         }
         clean = {k: payload[k] for k in allowed if k in payload}
         self.config_mgr.update(**clean)

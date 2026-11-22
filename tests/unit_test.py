@@ -384,6 +384,68 @@ def test_auto_updater_github_check_and_download() -> None:
     assert extract_release_update_info({"tag_name": "v9.9.9", "draft": True}, "1.4.0") is None
 
 
+def test_bluetooth_hotplug_and_mic_resampling() -> None:
+    from unittest.mock import patch
+    import numpy as np
+    import winflow.audio as wa
+
+    # 1. Verify 48kHz, 44.1kHz, and 8kHz Bluetooth CVSD -> 16kHz resampling
+    for src_sr in (48000, 44100, 8000):
+        one_sec = np.sin(np.linspace(0, 20, src_sr, dtype=np.float32))
+        out_16k = wa._resample_to_16k(one_sec, src_sr)
+        assert abs(len(out_16k) - 16000) <= 1
+        assert out_16k.dtype == np.float32
+
+    # 2. Simulate Desktop PC booting with 0 mics, then Bluetooth earbuds finishing refresh 0.3s after Alt+X!
+    fp_seq = [
+        (0, -1, ()),
+        (0, -1, ()),
+        (1, 0, ("Headset (Airdopes 800)",)),
+        (1, 0, ("Headset (Airdopes 800)",)),
+    ]
+    call_idx = [0]
+
+    def _fake_fp():
+        i = min(call_idx[0], len(fp_seq) - 1)
+        call_idx[0] += 1
+        return fp_seq[i]
+
+    class _DummyStream:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    waiting_msgs: list[str] = []
+    reinit_calls: list[bool] = []
+    rec = wa.AudioRecorder()
+
+    orig_last = wa._LAST_PA_FINGERPRINT
+    try:
+        wa._LAST_PA_FINGERPRINT = (0, -1, ())
+        with (
+            patch.object(wa, "_get_live_wavein_fingerprint", side_effect=_fake_fp),
+            patch.object(wa.sd, "_terminate", side_effect=lambda: reinit_calls.append(True)),
+            patch.object(wa.sd, "_initialize", side_effect=lambda: None),
+            patch.object(
+                wa,
+                "_usable_input_devices",
+                return_value=[(2, "Headset (Airdopes 800)", "MME", 16000.0, 1)],
+            ),
+            patch.object(rec, "_try_open_candidate", return_value=(_DummyStream(), 16000)),
+        ):
+            rec.start(on_waiting=waiting_msgs.append, wait_for_bt_s=1.5)
+            assert waiting_msgs == ["Connecting mic…"]
+            assert len(reinit_calls) >= 1, "PortAudio was not refreshed after Bluetooth hotplug!"
+            rec.cancel()
+    finally:
+        wa._LAST_PA_FINGERPRINT = orig_last
+
+
 if __name__ == "__main__":
     test_win32_struct_sizes()
     test_minimal_ui_has_no_overexplanation_or_examples()
@@ -392,4 +454,5 @@ if __name__ == "__main__":
     test_alt_x_hook_and_win_h_passthrough()
     test_overlay_topmost_z_order_and_self_healing()
     test_auto_updater_github_check_and_download()
+    test_bluetooth_hotplug_and_mic_resampling()
     print("All CI unit tests passed!")
